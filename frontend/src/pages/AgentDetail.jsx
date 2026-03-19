@@ -2,6 +2,37 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { agentAPI } from '../api'
 
+// Hardcoded skills and workspace files per agent type
+const AGENT_CONTENT = {
+  'feishu': {
+    skills: ['飞书消息读取', '飞书日历管理', '飞书任务管理', '飞书多维表格', '飞书云文档', '飞书用户搜索'],
+    workspaceFiles: ['AGENTS.md', 'SOUL.md', 'MEMORY.md', 'USER.md', 'TOOLS.md', 'HEARTBEAT.md'],
+    tasks: [
+      { id: 1, title: '处理飞书消息', status: 'in_progress', priority: 'high' },
+      { id: 2, title: '同步日历事件', status: 'completed', priority: 'medium' },
+      { id: 3, title: '更新任务清单', status: 'pending', priority: 'low' }
+    ]
+  },
+  'coding': {
+    skills: ['代码编写', '代码审查', 'Git操作', '调试分析', '架构设计', '测试驱动开发'],
+    workspaceFiles: ['AGENTS.md', 'SOUL.md', 'MEMORY.md', 'PROJECTS.md', 'CODE_REVIEW.md'],
+    tasks: [
+      { id: 1, title: '重构认证模块', status: 'in_progress', priority: 'high' },
+      { id: 2, title: '编写单元测试', status: 'completed', priority: 'medium' },
+      { id: 3, title: '优化API性能', status: 'pending', priority: 'high' }
+    ]
+  },
+  'default': {
+    skills: ['问题解决', '信息检索', '数据分析', '文档编写', '任务规划', '沟通协调'],
+    workspaceFiles: ['AGENTS.md', 'SOUL.md', 'MEMORY.md', 'DAILY_NOTES.md', 'USER.md'],
+    tasks: [
+      { id: 1, title: '日常巡检任务', status: 'in_progress', priority: 'medium' },
+      { id: 2, title: '日志分析报告', status: 'completed', priority: 'low' },
+      { id: 3, title: '下周计划安排', status: 'pending', priority: 'medium' }
+    ]
+  }
+}
+
 function AgentDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
@@ -17,7 +48,7 @@ function AgentDetail() {
     try {
       const res = await agentAPI.getAgent(id)
       setAgent(res.data)
-      // 简化 sessions 数据，避免渲染过大内容
+      // Simplify sessions data
       setSessions((res.data.sessions || []).map(s => ({
         key: s.key,
         sessionId: s.sessionId,
@@ -71,8 +102,33 @@ function AgentDetail() {
     }
   }
 
+  const getPriorityColor = (priority) => {
+    switch (priority) {
+      case 'high': return '#ef4444'
+      case 'medium': return '#f59e0b'
+      case 'low': return '#10b981'
+      default: return '#64748b'
+    }
+  }
+
+  const getTaskStatusIcon = (status) => {
+    switch (status) {
+      case 'in_progress': return '🔄'
+      case 'completed': return '✅'
+      case 'pending': return '⏳'
+      default: return '📋'
+    }
+  }
+
+  // Determine agent content based on role or channel
+  const agentContent = agent?.role?.toLowerCase().includes('feishu') || agent?.channel?.toLowerCase().includes('feishu')
+    ? AGENT_CONTENT['feishu']
+    : agent?.role?.toLowerCase().includes('coding') || agent?.role?.toLowerCase().includes('dev')
+    ? AGENT_CONTENT['coding']
+    : AGENT_CONTENT['default']
+
   if (loading) {
-    return <div className="empty">加载中...</div>
+    return <div className="empty loading-pulse">加载中...</div>
   }
 
   if (!agent) {
@@ -87,7 +143,7 @@ function AgentDetail() {
   }
 
   return (
-    <div>
+    <div className="agent-detail-container">
       {/* 返回按钮 */}
       <button 
         className="back-btn"
@@ -98,75 +154,86 @@ function AgentDetail() {
       </button>
 
       {/* Agent 头部信息 */}
-      <div className="card" style={{ marginBottom: '1rem' }}>
-        <div className="card-body" style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', padding: '1.25rem' }}>
-          <div style={{ 
-            width: '80px', 
-            height: '80px', 
-            borderRadius: '16px', 
-            background: 'var(--bg-hover)', 
-            display: 'flex', 
-            alignItems: 'center', 
-            justifyContent: 'center',
-            fontSize: '40px'
-          }}>
-            {agent.emoji}
-          </div>
-          <div style={{ flex: 1 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-              <h2 style={{ margin: 0, fontSize: '1.5rem', color: 'var(--text-primary)' }}>{agent.name}</h2>
-              <span 
-                className={`agent-status status-${agent.status}`}
-                style={{ background: `${getStatusColor(agent.status)}20`, color: getStatusColor(agent.status) }}
-              >
-                <span className="status-dot" style={{ backgroundColor: getStatusColor(agent.status) }}></span>
-                {getStatusText(agent.status)}
-              </span>
+      <div className="agent-detail-header">
+        <div className="header-glow"></div>
+        <div className="card" style={{ marginBottom: '1rem' }}>
+          <div className="card-body" style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', padding: '1.25rem' }}>
+            <div className="agent-avatar-container">
+              <div style={{ 
+                width: '80px', 
+                height: '80px', 
+                borderRadius: '16px', 
+                background: 'var(--bg-hover)', 
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'center',
+                fontSize: '40px'
+              }}>
+                {agent.emoji}
+              </div>
+              {agent.status === 'active' && (
+                <>
+                  <span className="avatar-ring"></span>
+                  <span className="avatar-ring avatar-ring-delay"></span>
+                </>
+              )}
             </div>
-            <p style={{ margin: '0.25rem 0 0', color: 'var(--text-secondary)' }}>{agent.role}</p>
-            <div style={{ marginTop: '0.5rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-              ID: {agent.id} • 最后活跃: {agent.lastActiveAgo || '从未'}
+            <div style={{ flex: 1 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                <h2 style={{ margin: 0, fontSize: '1.5rem', color: 'var(--text-primary)' }}>{agent.name}</h2>
+                <span 
+                  className={`agent-status status-${agent.status}`}
+                  style={{ background: `${getStatusColor(agent.status)}20`, color: getStatusColor(agent.status) }}
+                >
+                  <span className="status-dot" style={{ backgroundColor: getStatusColor(agent.status) }}></span>
+                  {getStatusText(agent.status)}
+                </span>
+              </div>
+              <p style={{ margin: '0.25rem 0 0', color: 'var(--text-secondary)' }}>{agent.role}</p>
+              <div style={{ marginTop: '0.5rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                ID: {agent.id} • 最后活跃: {agent.lastActiveAgo || '从未'}
+              </div>
             </div>
-          </div>
-          <div style={{ display: 'flex', gap: '0.5rem' }}>
-            <button className="refresh-btn" onClick={loadAgentDetail}>🔄 刷新</button>
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <button className="refresh-btn" onClick={loadAgentDetail}>🔄 刷新</button>
+            </div>
           </div>
         </div>
       </div>
 
       {/* 详细信息卡片 */}
-      <div className="card" style={{ marginBottom: '1rem' }}>
+      <div className="card detail-section" style={{ marginBottom: '1rem' }}>
         <div className="card-header">
-          <h3 className="card-title">📊 {agent.name} 详细信息</h3>
+          <h3 className="card-title gradient-text">📊 {agent.name} 详细信息</h3>
         </div>
         <div className="card-body">
           {/* 核心指标 */}
           <div style={{ marginBottom: '1.5rem' }}>
             <h4 style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', marginBottom: '0.75rem' }}>核心指标</h4>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem' }}>
-              <div style={{ padding: '1rem', background: 'var(--bg-hover)', borderRadius: '0.5rem', textAlign: 'center' }}>
-                <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: 'var(--primary-light)' }}>
+              <div className="metric-box metric-box-primary">
+                <div className="metric-box-value">
                   {formatTokenCount(agent.tokenUsage)}
                 </div>
-                <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Token 用量</div>
+                <div className="metric-box-label">Token 用量</div>
               </div>
-              <div style={{ padding: '1rem', background: 'var(--bg-hover)', borderRadius: '0.5rem', textAlign: 'center' }}>
-                <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: 'var(--success)' }}>
+              <div className="metric-box metric-box-success">
+                <div className="metric-box-value">
                   {agent.sessionCount || 0}
                 </div>
-                <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>会话数</div>
+                <div className="metric-box-label">会话数</div>
               </div>
-              <div style={{ padding: '1rem', background: 'var(--bg-hover)', borderRadius: '0.5rem', textAlign: 'center' }}>
-                <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: 'var(--warning)' }}>
+              <div className="metric-box metric-box-warning">
+                <div className="metric-box-value">
                   {formatTokenCount(agent.inputTokens)}
                 </div>
-                <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>输入 Token</div>
+                <div className="metric-box-label">输入 Token</div>
               </div>
-              <div style={{ padding: '1rem', background: 'var(--bg-hover)', borderRadius: '0.5rem', textAlign: 'center' }}>
-                <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#818cf8' }}>
+              <div className="metric-box metric-box-purple">
+                <div className="metric-box-value">
                   {formatTokenCount(agent.outputTokens)}
                 </div>
-                <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>输出 Token</div>
+                <div className="metric-box-label">输出 Token</div>
               </div>
             </div>
           </div>
@@ -175,31 +242,93 @@ function AgentDetail() {
           <div>
             <h4 style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', marginBottom: '0.75rem' }}>基本信息</h4>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1rem' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0.75rem', background: 'var(--bg-hover)', borderRadius: '0.5rem' }}>
-                <span style={{ color: 'var(--text-secondary)' }}>🤖 模型</span>
-                <span style={{ color: 'var(--text-primary)', fontWeight: '500' }}>{agent.model || '未知'}</span>
+              <div className="info-row">
+                <span className="info-label">🤖 模型</span>
+                <span className="info-value">{agent.model || '未知'}</span>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0.75rem', background: 'var(--bg-hover)', borderRadius: '0.5rem' }}>
-                <span style={{ color: 'var(--text-secondary)' }}>📡 渠道</span>
-                <span style={{ color: 'var(--text-primary)', fontWeight: '500' }}>{agent.channel || '无'}</span>
+              <div className="info-row">
+                <span className="info-label">📡 渠道</span>
+                <span className="info-value">{agent.channel || '无'}</span>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0.75rem', background: 'var(--bg-hover)', borderRadius: '0.5rem' }}>
-                <span style={{ color: 'var(--text-secondary)' }}>⏱️ 最后活跃</span>
-                <span style={{ color: 'var(--text-primary)', fontWeight: '500' }}>{agent.lastActiveAgo || '从未'}</span>
+              <div className="info-row">
+                <span className="info-label">⏱️ 最后活跃</span>
+                <span className="info-value">{agent.lastActiveAgo || '从未'}</span>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0.75rem', background: 'var(--bg-hover)', borderRadius: '0.5rem' }}>
-                <span style={{ color: 'var(--text-secondary)' }}>🔀 子Agent调用</span>
-                <span style={{ color: 'var(--text-primary)', fontWeight: '500' }}>{agent.spawnCount || 0}</span>
+              <div className="info-row">
+                <span className="info-label">🔀 子Agent调用</span>
+                <span className="info-value">{agent.spawnCount || 0}</span>
               </div>
             </div>
           </div>
         </div>
       </div>
 
-      {/* 会话历史 */}
-      <div className="card">
+      {/* Skills Section */}
+      <div className="card detail-section" style={{ marginBottom: '1rem' }}>
         <div className="card-header">
-          <h3 className="card-title">📋 相关会话 ({sessions.length})</h3>
+          <h3 className="card-title gradient-text">🛠️ 已安装技能</h3>
+        </div>
+        <div className="card-body">
+          <div className="skills-grid">
+            {agentContent.skills.map((skill, idx) => (
+              <div key={idx} className="skill-tag" style={{ animationDelay: `${idx * 0.05}s` }}>
+                <span className="skill-icon">✨</span>
+                {skill}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Workspace MD Files Section */}
+      <div className="card detail-section" style={{ marginBottom: '1rem' }}>
+        <div className="card-header">
+          <h3 className="card-title gradient-text">📁 工作空间文件</h3>
+        </div>
+        <div className="card-body">
+          <div className="files-list">
+            {agentContent.workspaceFiles.map((file, idx) => (
+              <div key={idx} className="file-item">
+                <span className="file-icon">📄</span>
+                <span className="file-name">{file}</span>
+                <span className="file-badge">MD</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Tasks Section */}
+      <div className="card detail-section" style={{ marginBottom: '1rem' }}>
+        <div className="card-header">
+          <h3 className="card-title gradient-text">📋 当前任务</h3>
+        </div>
+        <div className="card-body">
+          <div className="task-list-enhanced">
+            {agentContent.tasks.map((task, idx) => (
+              <div key={task.id} className="task-item-enhanced" style={{ animationDelay: `${idx * 0.08}s` }}>
+                <div className="task-status-icon">{getTaskStatusIcon(task.status)}</div>
+                <div className="task-content">
+                  <div className="task-title">{task.title}</div>
+                  <div className="task-meta-row">
+                    <span className="task-priority-tag" style={{ color: getPriorityColor(task.priority) }}>
+                      ● {task.priority === 'high' ? '高优先级' : task.priority === 'medium' ? '中优先级' : '低优先级'}
+                    </span>
+                  </div>
+                </div>
+                <div className={`task-status-badge task-status-${task.status}`}>
+                  {task.status === 'in_progress' ? '进行中' : task.status === 'completed' ? '已完成' : '待处理'}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* 会话历史 */}
+      <div className="card detail-section">
+        <div className="card-header">
+          <h3 className="card-title gradient-text">📋 相关会话 ({sessions.length})</h3>
         </div>
         <div className="card-body">
           {sessions.length === 0 ? (
@@ -209,10 +338,8 @@ function AgentDetail() {
               {sessions.map((session, idx) => (
                 <div 
                   key={idx}
-                  style={{ 
-                    padding: '1rem', 
-                    borderBottom: idx < sessions.length - 1 ? '1px solid var(--border)' : 'none'
-                  }}
+                  className="session-item"
+                  style={{ animationDelay: `${idx * 0.05}s` }}
                 >
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                     <div>

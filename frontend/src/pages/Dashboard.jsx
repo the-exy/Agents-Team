@@ -54,53 +54,79 @@ function Dashboard() {
     <div>
       {/* 统计卡片 */}
       <div className="stats-grid">
-        <div className="stat-card">
+        <div className="stat-card stat-card-primary">
+          <div className="stat-card-bg"></div>
           <div className="stat-label">总Agent数</div>
           <div className="stat-value primary">{stats?.totalAgents || agents.length}</div>
+          <div className="stat-glow"></div>
         </div>
-        <div className="stat-card">
+        <div className="stat-card stat-card-success">
+          <div className="stat-card-bg"></div>
           <div className="stat-label">在线</div>
           <div className="stat-value success">{stats?.onlineCount || 0}</div>
+          <div className="stat-glow"></div>
         </div>
-        <div className="stat-card">
+        <div className="stat-card stat-card-warning">
+          <div className="stat-card-bg"></div>
           <div className="stat-label">空闲</div>
           <div className="stat-value warning">{stats?.idleCount || 0}</div>
+          <div className="stat-glow"></div>
         </div>
-        <div className="stat-card">
+        <div className="stat-card stat-card-active">
+          <div className="stat-card-bg"></div>
           <div className="stat-label">活跃任务</div>
           <div className="stat-value">{stats?.activeTasks || 0}</div>
+          <div className="stat-glow"></div>
+          <div className="active-indicator">
+            <span className="pulse-dot"></span>
+          </div>
         </div>
-        <div className="stat-card">
+        <div className="stat-card stat-card-success">
+          <div className="stat-card-bg"></div>
           <div className="stat-label">已完成</div>
           <div className="stat-value success">{stats?.completedTasks || 0}</div>
+          <div className="stat-glow"></div>
         </div>
-        <div className="stat-card">
+        <div className="stat-card stat-card-gradient">
+          <div className="stat-card-bg"></div>
           <div className="stat-label">Token总量</div>
           <div className="stat-value" style={{ fontSize: '1.5rem' }}>
             {agents.reduce((sum, a) => sum + (a.tokenUsage || 0), 0) >= 1000000 
               ? (agents.reduce((sum, a) => sum + (a.tokenUsage || 0), 0) / 1000000).toFixed(1) + 'M'
               : (agents.reduce((sum, a) => sum + (a.tokenUsage || 0), 0) / 1000).toFixed(1) + 'K'}
           </div>
+          <div className="stat-glow"></div>
         </div>
       </div>
 
       {/* Agent列表 */}
       <div className="card">
         <div className="card-header">
-          <h2 className="card-title">🤖 Agent 状态</h2>
-          <button className="refresh-btn" onClick={loadData}>🔄 刷新</button>
+          <h2 className="card-title gradient-text">🤖 Agent 状态</h2>
+          <button className="refresh-btn" onClick={loadData}>
+            <span className="refresh-icon">🔄</span> 刷新
+          </button>
         </div>
         <div className="card-body">
           <div className="agents-grid">
-            {agents.map(agent => (
+            {agents.map((agent, idx) => (
               <div 
                 key={agent.id} 
-                className="agent-card" 
+                className={`agent-card ${agent.status === 'active' ? 'agent-active' : ''}`}
                 onClick={() => navigate(`/agent/${agent.id}`)}
-                style={{ cursor: 'pointer' }}
+                style={{ cursor: 'pointer', '--delay': `${idx * 0.05}s` }}
               >
+                {agent.status === 'active' && (
+                  <>
+                    <div className="ripple-effect"></div>
+                    <div className="ripple-effect ripple-delay"></div>
+                  </>
+                )}
                 <div className="agent-header">
-                  <div className="agent-emoji">{agent.emoji}</div>
+                  <div className="agent-emoji-wrapper">
+                    <div className="agent-emoji">{agent.emoji}</div>
+                    {agent.status === 'active' && <span className="active-ring"></span>}
+                  </div>
                   <div className="agent-info">
                     <h3>{agent.name}</h3>
                     <p>{agent.role}</p>

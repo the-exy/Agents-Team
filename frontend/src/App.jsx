@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Routes, Route, Link, useLocation } from 'react-router-dom'
 import Dashboard from './pages/Dashboard'
 import Topology from './pages/Topology'
+import AgentDetail from './pages/AgentDetail'
 import Tasks from './pages/Tasks'
 import Logs from './pages/Logs'
 
@@ -40,6 +41,7 @@ function App() {
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/topology" element={<Topology />} />
+          <Route path="/agent/:id" element={<AgentDetail />} />
           <Route path="/tasks" element={<Tasks />} />
           <Route path="/logs" element={<Logs />} />
         </Routes>

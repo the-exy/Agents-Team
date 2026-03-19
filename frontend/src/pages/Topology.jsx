@@ -9,7 +9,7 @@ function Topology() {
 
   useEffect(() => {
     loadTopology()
-    const interval = setInterval(loadTopology, 10000)
+    const interval = setInterval(loadTopology, 5000) // Changed from 10000 to 5000
     return () => clearInterval(interval)
   }, [])
 
@@ -123,8 +123,10 @@ function Topology() {
     <div>
       <div className="card">
         <div className="card-header">
-          <h2 className="card-title">🌐 Agent 网络拓扑</h2>
-          <button className="refresh-btn" onClick={loadTopology}>🔄 刷新</button>
+          <h2 className="card-title gradient-text">🌐 Agent 网络拓扑</h2>
+          <button className="refresh-btn" onClick={loadTopology}>
+            <span className="refresh-icon">🔄</span> 刷新
+          </button>
         </div>
         <div className="card-body">
           {/* 拓扑统计 */}
@@ -136,25 +138,61 @@ function Topology() {
           </div>
           
           <div className="topology-container">
+            {/* Grid background pattern */}
+            <svg className="topology-grid-pattern" viewBox="0 0 800 400" preserveAspectRatio="none">
+              <defs>
+                <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+                  <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" strokeWidth="0.5"/>
+                </pattern>
+                <radialGradient id="nodeGlow" cx="50%" cy="50%" r="50%">
+                  <stop offset="0%" stopColor="#10b981" stopOpacity="0.4"/>
+                  <stop offset="100%" stopColor="#10b981" stopOpacity="0"/>
+                </radialGradient>
+              </defs>
+              <rect width="100%" height="100%" fill="url(#grid)" />
+            </svg>
+            
             <svg 
               className="topology-canvas" 
               viewBox="0 0 800 400"
               style={{ width: '100%', height: 'auto', minHeight: '400px' }}
             >
-              {/* 连接线 */}
+              {/* Animated connection lines */}
               <g className="links">
                 {topology.links.map((link, idx) => (
-                  <path
-                    key={`link-${idx}`}
-                    d={getLinkPath(link)}
-                    fill="none"
-                    stroke={getLinkColor(link.type)}
-                    strokeWidth="2"
-                    strokeOpacity="0.6"
-                  />
+                  <g key={`link-${idx}`}>
+                    {/* Glow effect under the line */}
+                    <path
+                      d={getLinkPath(link)}
+                      fill="none"
+                      stroke={getLinkColor(link.type)}
+                      strokeWidth="6"
+                      strokeOpacity="0.15"
+                      strokeLinecap="round"
+                    />
+                    {/* Main line */}
+                    <path
+                      d={getLinkPath(link)}
+                      fill="none"
+                      stroke={getLinkColor(link.type)}
+                      strokeWidth="2"
+                      strokeOpacity="0.6"
+                      strokeLinecap="round"
+                      className="flow-line"
+                      strokeDasharray="8 4"
+                    />
+                    {/* Animated flow particle */}
+                    <circle r="3" fill="#fff" opacity="0.8">
+                      <animateMotion
+                        dur={`${2 + idx * 0.3}s`}
+                        repeatCount="indefinite"
+                        path={getLinkPath(link)}
+                      />
+                    </circle>
+                  </g>
                 ))}
                 
-                {/* 连接线标签 */}
+                {/* Connection labels */}
                 {topology.links.map((link, idx) => {
                   const sourceIdx = topology.nodes.findIndex(n => n.id === link.source)
                   const targetIdx = topology.nodes.findIndex(n => n.id === link.target)
@@ -179,18 +217,31 @@ function Topology() {
                 })}
               </g>
 
-              {/* 节点 */}
+              {/* Nodes */}
               <g className="nodes">
                 {topology.nodes.map((node, idx) => {
                   const pos = getNodePosition(node.id, idx, topology.nodes.length)
                   const isClickable = !['system', 'network'].includes(node.id)
+                  const isOnline = node.status === 'online'
                   
                   return (
                     <g 
                       key={node.id} 
                       style={{ cursor: isClickable ? 'pointer' : 'default' }}
                       onClick={() => handleNodeClick(node.id)}
+                      className={`topo-node-group ${isOnline ? 'online' : ''}`}
                     >
+                      {/* Glow effect for online nodes */}
+                      {isOnline && (
+                        <circle
+                          cx={pos.x}
+                          cy={pos.y}
+                          r="50"
+                          fill="url(#nodeGlow)"
+                          className="node-glow"
+                        />
+                      )}
+                      
                       <rect
                         x={pos.x - nodeWidth / 2}
                         y={pos.y - nodeHeight / 2}
@@ -199,19 +250,34 @@ function Topology() {
                         fill="#1e293b"
                         rx="8"
                         stroke={getStatusColor(node.status)}
-                        strokeWidth="2"
+                        strokeWidth={isOnline ? "3" : "2"}
+                        className={isOnline ? 'node-online' : ''}
                       />
                       
                       <circle
                         cx={pos.x + nodeWidth / 2 - 12}
                         cy={pos.y - nodeHeight / 2 + 10}
-                        r="4"
+                        r={isOnline ? "6" : "4"}
                         fill={getStatusColor(node.status)}
+                        className={isOnline ? 'status-pulse' : ''}
                       >
-                        {node.status === 'online' && (
-                          <animate attributeName="opacity" values="1;0.5;1" dur="2s" repeatCount="indefinite" />
+                        {isOnline && (
+                          <animate attributeName="opacity" values="1;0.4;1" dur="1.5s" repeatCount="indefinite" />
                         )}
                       </circle>
+                      
+                      {isOnline && (
+                        <circle
+                          cx={pos.x + nodeWidth / 2 - 12}
+                          cy={pos.y - nodeHeight / 2 + 10}
+                          r="10"
+                          fill="none"
+                          stroke={getStatusColor(node.status)}
+                          strokeWidth="1"
+                          opacity="0.4"
+                          className="ring-pulse"
+                        />
+                      )}
                       
                       <text x={pos.x - nodeWidth / 2 + 12} y={pos.y + 5} fontSize="20" fontFamily="system-ui, sans-serif">
                         {node.emoji}
@@ -237,10 +303,12 @@ function Topology() {
             </svg>
           </div>
 
-          {/* 图例 */}
+          {/* Legend */}
           <div style={{ display: 'flex', gap: '1.5rem', justifyContent: 'center', marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid #334155', flexWrap: 'wrap' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem', color: '#94a3b8' }}>
-              <span style={{ width: '12px', height: '3px', background: '#818cf8', borderRadius: '2px' }}></span>
+              <span style={{ width: '20px', height: '3px', background: '#818cf8', borderRadius: '2px', position: 'relative' }}>
+                <span className="flow-indicator" style={{ background: '#fff' }}></span>
+              </span>
               协调关系
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem', color: '#94a3b8' }}>
@@ -252,7 +320,9 @@ function Topology() {
               监控关系
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem', color: '#94a3b8', marginLeft: '1rem' }}>
-              <span style={{ width: '8px', height: '8px', background: '#10b981', borderRadius: '50%' }}></span>
+              <span style={{ width: '10px', height: '10px', background: '#10b981', borderRadius: '50%', position: 'relative' }}>
+                <span style={{ position: 'absolute', inset: '-3px', border: '2px solid #10b981', borderRadius: '50%', opacity: 0.4, animation: 'ringPulse 2s infinite' }}></span>
+              </span>
               在线
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem', color: '#94a3b8' }}>

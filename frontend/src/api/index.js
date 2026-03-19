@@ -10,7 +10,10 @@ const api = axios.create({
 export const agentAPI = {
   getAgents: () => api.get('/agents'),
   getAgent: (id) => api.get(`/agents/${id}`),
-  getAgentHistory: (id) => api.get(`/agents/${id}/history`)
+  getAgentHistory: (id) => api.get(`/agents/${id}/history`),
+  getAgentSkills: (id) => api.get(`/agents/${id}/skills`),
+  getAgentFiles: (id) => api.get(`/agents/${id}/files`),
+  getAgentTasks: (id) => api.get(`/agents/${id}/tasks`)
 };
 
 export const projectAPI = {
