@@ -396,7 +396,7 @@ body {
 
 /* Topology */
 .topology-container {
-  min-height: 400px;
+  min-height: 500px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -405,7 +405,7 @@ body {
 
 .topology-canvas {
   width: 100%;
-  height: 400px;
+  height: 500px;
   position: relative;
 }
 
@@ -964,6 +964,11 @@ body {
   border-radius: 0.25rem;
   font-size: 0.65rem;
   font-weight: 600;
+}
+
+.file-badge-missing {
+  background: rgba(239, 68, 68, 0.15);
+  color: var(--danger);
 }
 
 /* ===== Enhanced Task List ===== */

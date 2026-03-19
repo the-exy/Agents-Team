@@ -9,7 +9,7 @@ function Topology() {
 
   useEffect(() => {
     loadTopology()
-    const interval = setInterval(loadTopology, 5000) // Changed from 10000 to 5000
+    const interval = setInterval(loadTopology, 5000)
     return () => clearInterval(interval)
   }, [])
 
@@ -25,60 +25,60 @@ function Topology() {
 
   // 计算节点位置 - 放射状布局
   const getNodePosition = (nodeId, index, total) => {
-    const centerX = 400
-    const centerY = 200
-    const mainRadius = 120
-    const subRadius = 200
-    
+    const centerX = 500
+    const centerY = 250
+    const mainRadius = 160
+    const subRadius = 320
+
     if (nodeId === 'main') {
-      return { x: centerX, y: 80 }
+      return { x: centerX, y: 60 }
     }
-    
+
     if (nodeId === 'system') {
-      return { x: 700, y: 80 }
+      return { x: 880, y: 80 }
     }
-    
+
     if (nodeId === 'network') {
-      return { x: 700, y: 160 }
+      return { x: 880, y: 200 }
     }
-    
+
     // Agent 子节点
-    const agentNodes = topology.nodes.filter(n => 
+    const agentNodes = topology.nodes.filter(n =>
       !['main', 'system', 'network'].includes(n.id)
     )
     const agentIndex = agentNodes.findIndex(n => n.id === nodeId)
-    
+
     if (agentIndex === -1) {
       return { x: centerX, y: centerY }
     }
-    
-    // 围绕主节点分布
+
+    // 围绕主节点分布，留出更多空间
     const angle = (agentIndex / Math.max(agentNodes.length, 1)) * 2 * Math.PI - Math.PI / 2
     return {
       x: centerX + subRadius * Math.cos(angle),
-      y: centerY + subRadius * Math.sin(angle) + 40
+      y: centerY + subRadius * Math.sin(angle) + 60
     }
   }
 
-  const nodeWidth = 100
-  const nodeHeight = 60
+  const nodeWidth = 120
+  const nodeHeight = 70
 
   const getLinkPath = (link) => {
     const sourceIdx = topology.nodes.findIndex(n => n.id === link.source)
     const targetIdx = topology.nodes.findIndex(n => n.id === link.target)
     if (sourceIdx === -1 || targetIdx === -1) return ''
-    
+
     const source = topology.nodes[sourceIdx]
     const target = topology.nodes[targetIdx]
     const sourcePos = getNodePosition(source.id, sourceIdx, topology.nodes.length)
     const targetPos = getNodePosition(target.id, targetIdx, topology.nodes.length)
-    
+
     const startX = sourcePos.x
     const startY = sourcePos.y + nodeHeight / 2
     const endX = targetPos.x
     const endY = targetPos.y - nodeHeight / 2
     const midY = (startY + endY) / 2
-    
+
     return `M ${startX} ${startY} Q ${startX} ${midY}, ${(startX + endX) / 2} ${midY} T ${endX} ${endY}`
   }
 
@@ -136,10 +136,10 @@ function Topology() {
             <span>🌐 接口: {topology.stats?.networkInterfaces || 0}</span>
             <span>💻 {topology.stats?.hostname || 'Unknown'}</span>
           </div>
-          
+
           <div className="topology-container">
             {/* Grid background pattern */}
-            <svg className="topology-grid-pattern" viewBox="0 0 800 400" preserveAspectRatio="none">
+            <svg className="topology-grid-pattern" viewBox="0 0 1000 500" preserveAspectRatio="none">
               <defs>
                 <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
                   <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" strokeWidth="0.5"/>
@@ -151,11 +151,11 @@ function Topology() {
               </defs>
               <rect width="100%" height="100%" fill="url(#grid)" />
             </svg>
-            
-            <svg 
-              className="topology-canvas" 
-              viewBox="0 0 800 400"
-              style={{ width: '100%', height: 'auto', minHeight: '400px' }}
+
+            <svg
+              className="topology-canvas"
+              viewBox="0 0 1000 500"
+              style={{ width: '100%', height: 'auto', minHeight: '500px' }}
             >
               {/* Animated connection lines */}
               <g className="links">
@@ -191,21 +191,21 @@ function Topology() {
                     </circle>
                   </g>
                 ))}
-                
+
                 {/* Connection labels */}
                 {topology.links.map((link, idx) => {
                   const sourceIdx = topology.nodes.findIndex(n => n.id === link.source)
                   const targetIdx = topology.nodes.findIndex(n => n.id === link.target)
                   if (sourceIdx === -1 || targetIdx === -1) return null
-                  
+
                   const source = topology.nodes[sourceIdx]
                   const target = topology.nodes[targetIdx]
                   const sourcePos = getNodePosition(source.id, sourceIdx, topology.nodes.length)
                   const targetPos = getNodePosition(target.id, targetIdx, topology.nodes.length)
-                  
+
                   const midX = (sourcePos.x + targetPos.x) / 2
                   const midY = (sourcePos.y + targetPos.y) / 2
-                  
+
                   return (
                     <g key={`label-${idx}`}>
                       <rect x={midX - 18} y={midY - 8} width="36" height="16" fill="#1e293b" rx="4" />
@@ -223,10 +223,10 @@ function Topology() {
                   const pos = getNodePosition(node.id, idx, topology.nodes.length)
                   const isClickable = !['system', 'network'].includes(node.id)
                   const isOnline = node.status === 'online'
-                  
+
                   return (
-                    <g 
-                      key={node.id} 
+                    <g
+                      key={node.id}
                       style={{ cursor: isClickable ? 'pointer' : 'default' }}
                       onClick={() => handleNodeClick(node.id)}
                       className={`topo-node-group ${isOnline ? 'online' : ''}`}
@@ -236,28 +236,28 @@ function Topology() {
                         <circle
                           cx={pos.x}
                           cy={pos.y}
-                          r="50"
+                          r="55"
                           fill="url(#nodeGlow)"
                           className="node-glow"
                         />
                       )}
-                      
+
                       <rect
                         x={pos.x - nodeWidth / 2}
                         y={pos.y - nodeHeight / 2}
                         width={nodeWidth}
                         height={nodeHeight}
                         fill="#1e293b"
-                        rx="8"
+                        rx="10"
                         stroke={getStatusColor(node.status)}
                         strokeWidth={isOnline ? "3" : "2"}
                         className={isOnline ? 'node-online' : ''}
                       />
-                      
+
                       <circle
-                        cx={pos.x + nodeWidth / 2 - 12}
-                        cy={pos.y - nodeHeight / 2 + 10}
-                        r={isOnline ? "6" : "4"}
+                        cx={pos.x + nodeWidth / 2 - 14}
+                        cy={pos.y - nodeHeight / 2 + 12}
+                        r={isOnline ? "7" : "5"}
                         fill={getStatusColor(node.status)}
                         className={isOnline ? 'status-pulse' : ''}
                       >
@@ -265,34 +265,34 @@ function Topology() {
                           <animate attributeName="opacity" values="1;0.4;1" dur="1.5s" repeatCount="indefinite" />
                         )}
                       </circle>
-                      
+
                       {isOnline && (
                         <circle
-                          cx={pos.x + nodeWidth / 2 - 12}
-                          cy={pos.y - nodeHeight / 2 + 10}
-                          r="10"
+                          cx={pos.x + nodeWidth / 2 - 14}
+                          cy={pos.y - nodeHeight / 2 + 12}
+                          r="12"
                           fill="none"
                           stroke={getStatusColor(node.status)}
-                          strokeWidth="1"
+                          strokeWidth="1.5"
                           opacity="0.4"
                           className="ring-pulse"
                         />
                       )}
-                      
-                      <text x={pos.x - nodeWidth / 2 + 12} y={pos.y + 5} fontSize="20" fontFamily="system-ui, sans-serif">
+
+                      <text x={pos.x - nodeWidth / 2 + 14} y={pos.y + 6} fontSize="22" fontFamily="system-ui, sans-serif">
                         {node.emoji}
                       </text>
-                      
-                      <text x={pos.x + 5} y={pos.y + 4} fill="#e2e8f0" fontSize="11" fontWeight="500" fontFamily="system-ui, sans-serif">
-                        {node.name.length > 10 ? node.name.slice(0, 10) + '...' : node.name}
+
+                      <text x={pos.x + 6} y={pos.y + 5} fill="#e2e8f0" fontSize="12" fontWeight="500" fontFamily="system-ui, sans-serif">
+                        {node.name.length > 12 ? node.name.slice(0, 12) + '…' : node.name}
                       </text>
-                      
-                      <text x={pos.x} y={pos.y + 18} fill="#64748b" fontSize="8" textAnchor="middle" fontFamily="system-ui, sans-serif">
+
+                      <text x={pos.x} y={pos.y + 22} fill="#64748b" fontSize="9" textAnchor="middle" fontFamily="system-ui, sans-serif">
                         {node.role}
                       </text>
-                      
+
                       {node.tokens > 0 && (
-                        <text x={pos.x} y={pos.y + 30} fill="#818cf8" fontSize="7" textAnchor="middle" fontFamily="system-ui, sans-serif">
+                        <text x={pos.x} y={pos.y + 36} fill="#818cf8" fontSize="8" textAnchor="middle" fontFamily="system-ui, sans-serif">
                           {node.tokens >= 1000 ? (node.tokens / 1000).toFixed(0) + 'K' : node.tokens} tokens
                         </text>
                       )}
@@ -334,7 +334,7 @@ function Topology() {
               离线
             </div>
           </div>
-          
+
           <p style={{ textAlign: 'center', marginTop: '0.75rem', fontSize: '0.75rem', color: '#64748b' }}>
             💡 点击 Agent 节点查看详情（系统节点除外）
           </p>

@@ -2,42 +2,13 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { agentAPI } from '../api'
 
-// Hardcoded skills and workspace files per agent type
-const AGENT_CONTENT = {
-  'feishu': {
-    skills: ['飞书消息读取', '飞书日历管理', '飞书任务管理', '飞书多维表格', '飞书云文档', '飞书用户搜索'],
-    workspaceFiles: ['AGENTS.md', 'SOUL.md', 'MEMORY.md', 'USER.md', 'TOOLS.md', 'HEARTBEAT.md'],
-    tasks: [
-      { id: 1, title: '处理飞书消息', status: 'in_progress', priority: 'high' },
-      { id: 2, title: '同步日历事件', status: 'completed', priority: 'medium' },
-      { id: 3, title: '更新任务清单', status: 'pending', priority: 'low' }
-    ]
-  },
-  'coding': {
-    skills: ['代码编写', '代码审查', 'Git操作', '调试分析', '架构设计', '测试驱动开发'],
-    workspaceFiles: ['AGENTS.md', 'SOUL.md', 'MEMORY.md', 'PROJECTS.md', 'CODE_REVIEW.md'],
-    tasks: [
-      { id: 1, title: '重构认证模块', status: 'in_progress', priority: 'high' },
-      { id: 2, title: '编写单元测试', status: 'completed', priority: 'medium' },
-      { id: 3, title: '优化API性能', status: 'pending', priority: 'high' }
-    ]
-  },
-  'default': {
-    skills: ['问题解决', '信息检索', '数据分析', '文档编写', '任务规划', '沟通协调'],
-    workspaceFiles: ['AGENTS.md', 'SOUL.md', 'MEMORY.md', 'DAILY_NOTES.md', 'USER.md'],
-    tasks: [
-      { id: 1, title: '日常巡检任务', status: 'in_progress', priority: 'medium' },
-      { id: 2, title: '日志分析报告', status: 'completed', priority: 'low' },
-      { id: 3, title: '下周计划安排', status: 'pending', priority: 'medium' }
-    ]
-  }
-}
-
 function AgentDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
   const [agent, setAgent] = useState(null)
   const [sessions, setSessions] = useState([])
+  const [skills, setSkills] = useState([])
+  const [workspaceFiles, setWorkspaceFiles] = useState([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -46,10 +17,15 @@ function AgentDetail() {
 
   const loadAgentDetail = async () => {
     try {
-      const res = await agentAPI.getAgent(id)
-      setAgent(res.data)
-      // Simplify sessions data
-      setSessions((res.data.sessions || []).map(s => ({
+      const [agentRes, skillsRes, filesRes] = await Promise.all([
+        agentAPI.getAgent(id),
+        agentAPI.getAgentSkills(id),
+        agentAPI.getAgentFiles(id)
+      ])
+      const agentData = agentRes.data
+      setAgent(agentData)
+      // Sessions
+      setSessions((agentData.sessions || []).map(s => ({
         key: s.key,
         sessionId: s.sessionId,
         updatedAt: s.updatedAt,
@@ -60,6 +36,10 @@ function AgentDetail() {
         channel: s.lastChannel || s.channel,
         abortedLastRun: s.abortedLastRun
       })))
+      // Skills
+      setSkills(skillsRes.data.skills || [])
+      // Workspace files
+      setWorkspaceFiles(filesRes.data.files || [])
     } catch (error) {
       console.error('加载 Agent 详情失败:', error)
     }
@@ -102,15 +82,6 @@ function AgentDetail() {
     }
   }
 
-  const getPriorityColor = (priority) => {
-    switch (priority) {
-      case 'high': return '#ef4444'
-      case 'medium': return '#f59e0b'
-      case 'low': return '#10b981'
-      default: return '#64748b'
-    }
-  }
-
   const getTaskStatusIcon = (status) => {
     switch (status) {
       case 'in_progress': return '🔄'
@@ -119,13 +90,6 @@ function AgentDetail() {
       default: return '📋'
     }
   }
-
-  // Determine agent content based on role or channel
-  const agentContent = agent?.role?.toLowerCase().includes('feishu') || agent?.channel?.toLowerCase().includes('feishu')
-    ? AGENT_CONTENT['feishu']
-    : agent?.role?.toLowerCase().includes('coding') || agent?.role?.toLowerCase().includes('dev')
-    ? AGENT_CONTENT['coding']
-    : AGENT_CONTENT['default']
 
   if (loading) {
     return <div className="empty loading-pulse">加载中...</div>
@@ -142,10 +106,12 @@ function AgentDetail() {
     )
   }
 
+  const agentTasks = agent.tasks || []
+
   return (
     <div className="agent-detail-container">
       {/* 返回按钮 */}
-      <button 
+      <button
         className="back-btn"
         onClick={() => navigate(-1)}
         style={{ marginBottom: '1rem', background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text-secondary)', padding: '0.5rem 1rem', borderRadius: '0.375rem', cursor: 'pointer' }}
@@ -159,13 +125,13 @@ function AgentDetail() {
         <div className="card" style={{ marginBottom: '1rem' }}>
           <div className="card-body" style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', padding: '1.25rem' }}>
             <div className="agent-avatar-container">
-              <div style={{ 
-                width: '80px', 
-                height: '80px', 
-                borderRadius: '16px', 
-                background: 'var(--bg-hover)', 
-                display: 'flex', 
-                alignItems: 'center', 
+              <div style={{
+                width: '80px',
+                height: '80px',
+                borderRadius: '16px',
+                background: 'var(--bg-hover)',
+                display: 'flex',
+                alignItems: 'center',
                 justifyContent: 'center',
                 fontSize: '40px'
               }}>
@@ -181,7 +147,7 @@ function AgentDetail() {
             <div style={{ flex: 1 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
                 <h2 style={{ margin: 0, fontSize: '1.5rem', color: 'var(--text-primary)' }}>{agent.name}</h2>
-                <span 
+                <span
                   className={`agent-status status-${agent.status}`}
                   style={{ background: `${getStatusColor(agent.status)}20`, color: getStatusColor(agent.status) }}
                 >
@@ -269,14 +235,18 @@ function AgentDetail() {
           <h3 className="card-title gradient-text">🛠️ 已安装技能</h3>
         </div>
         <div className="card-body">
-          <div className="skills-grid">
-            {agentContent.skills.map((skill, idx) => (
-              <div key={idx} className="skill-tag" style={{ animationDelay: `${idx * 0.05}s` }}>
-                <span className="skill-icon">✨</span>
-                {skill}
-              </div>
-            ))}
-          </div>
+          {skills.length === 0 ? (
+            <div className="empty" style={{ padding: '1.5rem' }}>暂无技能数据</div>
+          ) : (
+            <div className="skills-grid">
+              {skills.map((skill, idx) => (
+                <div key={idx} className="skill-tag" style={{ animationDelay: `${idx * 0.05}s` }}>
+                  <span className="skill-icon">✨</span>
+                  {typeof skill === 'string' ? skill : skill.name || skill.skill || JSON.stringify(skill)}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
@@ -286,15 +256,31 @@ function AgentDetail() {
           <h3 className="card-title gradient-text">📁 工作空间文件</h3>
         </div>
         <div className="card-body">
-          <div className="files-list">
-            {agentContent.workspaceFiles.map((file, idx) => (
-              <div key={idx} className="file-item">
-                <span className="file-icon">📄</span>
-                <span className="file-name">{file}</span>
-                <span className="file-badge">MD</span>
-              </div>
-            ))}
-          </div>
+          {workspaceFiles.length === 0 ? (
+            <div className="empty" style={{ padding: '1.5rem' }}>暂无工作空间文件</div>
+          ) : (
+            <div className="files-list">
+              {workspaceFiles.map((file, idx) => {
+                const fileName = typeof file === 'string' ? file : file.name || file.path || JSON.stringify(file)
+                const fileExists = typeof file === 'object' ? (file.exists !== false) : true
+                const lastModified = typeof file === 'object' ? file.lastModified || file.modified : null
+                return (
+                  <div key={idx} className="file-item">
+                    <span className="file-icon">📄</span>
+                    <span className="file-name">{fileName}</span>
+                    {lastModified && (
+                      <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>
+                        {formatTime(lastModified)}
+                      </span>
+                    )}
+                    <span className={`file-badge ${fileExists ? '' : 'file-badge-missing'}`}>
+                      {fileExists ? '存在' : '不存在'}
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+          )}
         </div>
       </div>
 
@@ -304,24 +290,32 @@ function AgentDetail() {
           <h3 className="card-title gradient-text">📋 当前任务</h3>
         </div>
         <div className="card-body">
-          <div className="task-list-enhanced">
-            {agentContent.tasks.map((task, idx) => (
-              <div key={task.id} className="task-item-enhanced" style={{ animationDelay: `${idx * 0.08}s` }}>
-                <div className="task-status-icon">{getTaskStatusIcon(task.status)}</div>
-                <div className="task-content">
-                  <div className="task-title">{task.title}</div>
-                  <div className="task-meta-row">
-                    <span className="task-priority-tag" style={{ color: getPriorityColor(task.priority) }}>
-                      ● {task.priority === 'high' ? '高优先级' : task.priority === 'medium' ? '中优先级' : '低优先级'}
-                    </span>
+          {agentTasks.length === 0 ? (
+            <div className="empty" style={{ padding: '1.5rem' }}>暂无任务数据</div>
+          ) : (
+            <div className="task-list-enhanced">
+              {agentTasks.map((task, idx) => (
+                <div key={task.id || idx} className="task-item-enhanced" style={{ animationDelay: `${idx * 0.08}s` }}>
+                  <div className="task-status-icon">{getTaskStatusIcon(task.status)}</div>
+                  <div className="task-content">
+                    <div className="task-title">{task.title || task.summary || JSON.stringify(task)}</div>
+                    {task.priority && (
+                      <div className="task-meta-row">
+                        <span className="task-priority-tag" style={{
+                          color: task.priority === 'high' ? '#ef4444' : task.priority === 'medium' ? '#f59e0b' : '#10b981'
+                        }}>
+                          ● {task.priority === 'high' ? '高优先级' : task.priority === 'medium' ? '中优先级' : '低优先级'}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                  <div className={`task-status-badge task-status-${task.status}`}>
+                    {task.status === 'in_progress' ? '进行中' : task.status === 'completed' ? '已完成' : '待处理'}
                   </div>
                 </div>
-                <div className={`task-status-badge task-status-${task.status}`}>
-                  {task.status === 'in_progress' ? '进行中' : task.status === 'completed' ? '已完成' : '待处理'}
-                </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
@@ -336,7 +330,7 @@ function AgentDetail() {
           ) : (
             <div className="session-list">
               {sessions.map((session, idx) => (
-                <div 
+                <div
                   key={idx}
                   className="session-item"
                   style={{ animationDelay: `${idx * 0.05}s` }}
@@ -347,13 +341,13 @@ function AgentDetail() {
                         {session.key || `会话 ${idx + 1}`}
                       </div>
                       <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '0.25rem' }}>
-                        🕐 {formatTime(session.updatedAt)} 
+                        🕐 {formatTime(session.updatedAt)}
                         {session.totalTokens && ` • 🎯 ${formatTokenCount(session.totalTokens)} tokens`}
                       </div>
                     </div>
-                    <span style={{ 
-                      fontSize: '0.75rem', 
-                      padding: '0.25rem 0.5rem', 
+                    <span style={{
+                      fontSize: '0.75rem',
+                      padding: '0.25rem 0.5rem',
                       borderRadius: '0.25rem',
                       background: session.abortedLastRun ? 'rgba(245, 158, 11, 0.15)' : 'rgba(16, 185, 129, 0.15)',
                       color: session.abortedLastRun ? 'var(--warning)' : 'var(--success)'

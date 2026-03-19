@@ -268,67 +268,50 @@ app.get('/api/agents', (req, res) => {
 app.get('/api/agents/:id', (req, res) => {
   const { id } = req.params;
   try {
-    const sessionsData = readSessionsData();
+    const allSessions = readAllSessionsData();
+    const sessionsData = allSessions[id] || {};
 
-    if (id === 'main') {
-      let totalTokens = 0;
-      let inputTokens = 0;
-      let outputTokens = 0;
-      let lastActive = null;
-      let sessions = [];
+    const config = agentConfigs[id] || { id, name: `${id} Agent`, emoji: '🤖', role: 'Agent' };
 
-      for (const [key, data] of Object.entries(sessionsData)) {
-        if (key.startsWith('agent:main:')) {
-          if (data.totalTokens) totalTokens += data.totalTokens;
-          if (data.inputTokens) inputTokens += data.inputTokens;
-          if (data.outputTokens) outputTokens += data.outputTokens;
-          if (data.updatedAt && (!lastActive || data.updatedAt > lastActive)) lastActive = data.updatedAt;
-          sessions.push({ key, ...data });
-        }
-      }
+    let totalTokens = 0;
+    let inputTokens = 0;
+    let outputTokens = 0;
+    let lastActive = null;
+    let channel = '无';
+    let model = '未知';
+    const sessions = [];
 
-      res.json({
-        id: 'main',
-        name: '主Agent',
-        emoji: '🤖',
-        role: '协调者',
-        status: lastActive && lastActive > Date.now() - 300000 ? 'active' : 'idle',
-        tokenUsage: totalTokens,
-        tokenUsageFormatted: formatTokenCount(totalTokens),
-        inputTokens,
-        outputTokens,
-        sessionCount: sessions.length,
-        sessions,
-        lastActive: lastActive ? new Date(lastActive).toISOString() : null,
-        lastActiveAgo: formatTimeAgo(lastActive),
-        tasks: taskConfigs['main'] || []
-      });
-    } else {
-      const config = agentConfigs[id] || { id, name: `${id} Agent`, emoji: '🤖', role: 'Agent' };
-      const agentSessions = Object.entries(sessionsData).filter(([key]) => key.includes(`:${id}`));
-
-      let totalTokens = 0;
-      let lastActive = null;
-      for (const [key, data] of agentSessions) {
-        if (data.totalTokens) totalTokens += data.totalTokens;
-        if (data.updatedAt && (!lastActive || data.updatedAt > lastActive)) lastActive = data.updatedAt;
-      }
-
-      res.json({
-        id: config.id,
-        name: config.name,
-        emoji: config.emoji,
-        role: config.role,
-        status: lastActive && lastActive > Date.now() - 300000 ? 'active' : 'idle',
-        tokenUsage: totalTokens,
-        tokenUsageFormatted: formatTokenCount(totalTokens),
-        sessionCount: agentSessions.length,
-        sessions: agentSessions.map(([key, data]) => ({ key, ...data })),
-        lastActive: lastActive ? new Date(lastActive).toISOString() : null,
-        lastActiveAgo: formatTimeAgo(lastActive),
-        tasks: taskConfigs[id] || []
-      });
+    for (const [key, data] of Object.entries(sessionsData)) {
+      if (data.totalTokens) totalTokens += data.totalTokens;
+      if (data.inputTokens) inputTokens += data.inputTokens;
+      if (data.outputTokens) outputTokens += data.outputTokens;
+      if (data.updatedAt && (!lastActive || data.updatedAt > lastActive)) lastActive = data.updatedAt;
+      if (data.lastChannel) channel = data.lastChannel;
+      if (data.model) model = data.model;
+      sessions.push({ key, ...data });
     }
+
+    const isActive = lastActive && lastActive > Date.now() - 5 * 60 * 1000;
+    const status = lastActive ? (isActive ? 'active' : 'idle') : 'offline';
+
+    res.json({
+      id: config.id,
+      name: config.name,
+      emoji: config.emoji,
+      role: config.role,
+      status,
+      tokenUsage: totalTokens,
+      tokenUsageFormatted: formatTokenCount(totalTokens),
+      inputTokens,
+      outputTokens,
+      sessionCount: sessions.length,
+      channel,
+      model,
+      sessions,
+      lastActive: lastActive ? new Date(lastActive).toISOString() : null,
+      lastActiveAgo: formatTimeAgo(lastActive),
+      tasks: taskConfigs[id] || []
+    });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -432,7 +415,7 @@ app.get('/api/agents/:id/files', (req, res) => {
     result.push({ name: file, path: filePath, exists, lastModified });
   }
 
-  res.json(result);
+  res.json({ files: result });
 });
 
 // GET /api/agents/:id/tasks - 获取 Agent 的任务
@@ -586,9 +569,42 @@ app.get('/api/topology', async (req, res) => {
     const memory = getMemoryUsage();
     const network = getNetworkInfo();
 
+    // 计算节点位置 - 基于节点数量动态布局
+    const viewBoxWidth = 1000;
+    const viewBoxHeight = 500;
+    const centerX = 400;
+    const centerY = 220;
+    const mainRadius = 280;
+
+    // 重新分配节点位置
+    const agentNodes = nodes.filter(n => !['system', 'network', 'main'].includes(n.id));
+    const totalSlots = agentNodes.length;
+    const angleStep = totalSlots > 0 ? (2 * Math.PI * 0.65) / totalSlots : 0;
+    const startAngle = -Math.PI * 0.35; // 从左上方开始
+
+    const nodePositions = {};
+    nodePositions['main'] = { x: 120, y: 160 };
+    nodePositions['system'] = { x: 860, y: 100 };
+    nodePositions['network'] = { x: 860, y: 200 };
+
+    agentNodes.forEach((node, idx) => {
+      const angle = startAngle + idx * angleStep;
+      nodePositions[node.id] = {
+        x: Math.round(centerX + mainRadius * Math.cos(angle)),
+        y: Math.round(centerY + mainRadius * Math.sin(angle))
+      };
+    });
+
+    // 应用位置到节点
+    nodes = nodes.map(node => ({
+      ...node,
+      position: nodePositions[node.id] || { x: centerX, y: centerY }
+    }));
+
     res.json({
       nodes,
       links,
+      viewBox: { width: viewBoxWidth, height: viewBoxHeight },
       stats: {
         cpu: cpu.usage,
         memory: memory.usage,
