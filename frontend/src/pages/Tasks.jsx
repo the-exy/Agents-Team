@@ -1,50 +1,46 @@
 import { useState, useEffect } from 'react'
-import { projectAPI } from '../api'
+import { taskAPI } from '../api'
 
 function Tasks() {
   const [projects, setProjects] = useState([])
   const [selectedProject, setSelectedProject] = useState(null)
-  const [projectTasks, setProjectTasks] = useState([])
+  const [taskGroups, setTaskGroups] = useState([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    loadProjects()
+    loadTasks()
   }, [])
 
-  const loadProjects = async () => {
+  const loadTasks = async () => {
     try {
-      const res = await projectAPI.getProjects()
+      const res = await taskAPI.getTasks()
       setProjects(res.data)
+      if (res.data.length > 0) {
+        setSelectedProject(res.data[0])
+        setTaskGroups(res.data[0].taskGroups || [])
+      }
     } catch (error) {
-      console.error('加载项目失败:', error)
+      console.error('加载任务失败:', error)
     }
     setLoading(false)
   }
 
-  const loadProjectTasks = async (projectId) => {
-    try {
-      const res = await projectAPI.getProjectTasks(projectId)
-      setProjectTasks(res.data)
-    } catch (error) {
-      console.error('加载任务失败:', error)
-      setProjectTasks([])
-    }
-  }
-
-  const handleProjectClick = async (project) => {
+  const handleProjectClick = (project) => {
     if (selectedProject?.id === project.id) {
       setSelectedProject(null)
-      setProjectTasks([])
+      setTaskGroups([])
     } else {
       setSelectedProject(project)
-      await loadProjectTasks(project.id)
+      setTaskGroups(project.taskGroups || [])
     }
   }
 
   const getStatusColor = (status) => {
     switch (status) {
-      case 'active': return '#10b981'
-      case 'planning': return '#f59e0b'
+      case 'active':
+      case 'in_progress': return '#10b981'
+      case 'planning':
+      case 'pending': return '#f59e0b'
       case 'completed': return '#6366f1'
       default: return '#64748b'
     }
@@ -52,16 +48,13 @@ function Tasks() {
 
   const getStatusText = (status) => {
     switch (status) {
-      case 'active': return '进行中'
-      case 'planning': return '规划中'
+      case 'active':
+      case 'in_progress': return '进行中'
+      case 'planning':
+      case 'pending': return '待开始'
       case 'completed': return '已完成'
       default: return '未知'
     }
-  }
-
-  const formatDate = (isoString) => {
-    const date = new Date(isoString)
-    return date.toLocaleString('zh-CN', { month: 'short', day: 'numeric' })
   }
 
   if (loading) {
@@ -72,7 +65,7 @@ function Tasks() {
     <div>
       <div className="card">
         <div className="card-header">
-          <h2 className="card-title">📋 项目管理</h2>
+          <h2 className="card-title">📋 项目任务管理</h2>
           <span style={{ fontSize: '0.8rem', color: '#94a3b8' }}>
             共 {projects.length} 个项目
           </span>
@@ -97,49 +90,59 @@ function Tasks() {
                       className="project-status"
                       style={{ color: getStatusColor(project.status), borderColor: getStatusColor(project.status) }}
                     >
-                      {getStatusText(project.status)}
+                      {project.status === 'active' ? '进行中' : project.status === 'planning' ? '规划中' : project.status}
                     </span>
                   </div>
                   <p className="project-description">{project.description}</p>
                   <div className="project-meta">
-                    <span>📊 任务数: {project.taskCount}</span>
                     <span>👥 负责: {project.agents?.join(', ') || '待分配'}</span>
-                    <span>📅 {formatDate(project.createdAt)}</span>
+                    <span>📊 进度: {project.progress || 0}%</span>
                   </div>
                   <div className="project-progress">
                     <div 
                       className="project-progress-fill"
                       style={{ 
-                        width: `${project.progress}%`,
+                        width: `${project.progress || 0}%`,
                         backgroundColor: getStatusColor(project.status)
                       }}
                     ></div>
                   </div>
-                  <div className="project-progress-text">
-                    进度: {project.progress}%
-                  </div>
                   
                   {/* 展开的任务明细 */}
-                  {selectedProject?.id === project.id && (
+                  {selectedProject?.id === project.id && taskGroups.length > 0 && (
                     <div className="project-tasks">
-                      <h4>📝 任务明细</h4>
-                      {projectTasks.length === 0 ? (
-                        <div className="empty" style={{ padding: '1rem' }}>暂无任务明细</div>
-                      ) : (
-                        <div className="task-list">
-                          {projectTasks.map(task => (
-                            <div key={task.id} className="task-item">
-                              <div className="task-header">
-                                <h3 className="task-title">{task.title}</h3>
+                      <h4>📝 各Agent任务明细</h4>
+                      {taskGroups.map(group => (
+                        <div key={group.agentId} className="task-group">
+                          <div className="task-group-header">
+                            <span className="task-group-emoji">{group.agentEmoji}</span>
+                            <span className="task-group-name">{group.agentName}</span>
+                            <span className="task-group-count">
+                              {group.tasks.filter(t => t.status === 'in_progress').length}/{group.tasks.length} 进行中
+                            </span>
+                          </div>
+                          <div className="task-list">
+                            {group.tasks.map(task => (
+                              <div key={task.id} className="task-item">
+                                <div className="task-header">
+                                  <h3 className="task-title">{task.title}</h3>
+                                  <span 
+                                    className="task-status"
+                                    style={{ color: getStatusColor(task.status) }}
+                                  >
+                                    {getStatusText(task.status)}
+                                  </span>
+                                </div>
                               </div>
-                              <div className="task-meta">
-                                <span className="task-type">类型: {task.type}</span>
-                              </div>
-                            </div>
-                          ))}
+                            ))}
+                          </div>
                         </div>
-                      )}
+                      ))}
                     </div>
+                  )}
+                  
+                  {selectedProject?.id === project.id && taskGroups.length === 0 && (
+                    <div className="empty" style={{ padding: '1rem' }}>暂无任务明细</div>
                   )}
                 </div>
               ))}

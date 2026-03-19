@@ -23,56 +23,53 @@ function Topology() {
     setLoading(false)
   }
 
-  // 动态计算节点位置 - 根据节点数量和类型
-  const getNodePosition = (nodeId, index, totalNodes) => {
+  // 计算节点位置 - 放射状布局
+  const getNodePosition = (nodeId, index, total) => {
     const centerX = 400
     const centerY = 200
-    const radius = 150
+    const mainRadius = 120
+    const subRadius = 200
     
-    // 主节点在中心
     if (nodeId === 'main') {
       return { x: centerX, y: 80 }
     }
     
-    // 系统节点在右上
-    if (nodeId === 'system' || nodeId === 'network') {
-      if (nodeId === 'system') {
-        return { x: 650, y: 100 }
-      } else {
-        return { x: 650, y: 180 }
-      }
+    if (nodeId === 'system') {
+      return { x: 700, y: 80 }
     }
     
-    // 子节点围绕中心分布
-    const agentNodes = topology.nodes.filter(n => n.id !== 'main' && n.id !== 'system' && n.id !== 'network')
+    if (nodeId === 'network') {
+      return { x: 700, y: 160 }
+    }
+    
+    // Agent 子节点
+    const agentNodes = topology.nodes.filter(n => 
+      !['main', 'system', 'network'].includes(n.id)
+    )
     const agentIndex = agentNodes.findIndex(n => n.id === nodeId)
     
     if (agentIndex === -1) {
       return { x: centerX, y: centerY }
     }
     
-    // 放射状分布
+    // 围绕主节点分布
     const angle = (agentIndex / Math.max(agentNodes.length, 1)) * 2 * Math.PI - Math.PI / 2
     return {
-      x: centerX + radius * Math.cos(angle),
-      y: centerY + radius * Math.sin(angle) + 40
+      x: centerX + subRadius * Math.cos(angle),
+      y: centerY + subRadius * Math.sin(angle) + 40
     }
   }
 
-  // 节点尺寸
-  const nodeWidth = 90
-  const nodeHeight = 55
+  const nodeWidth = 100
+  const nodeHeight = 60
 
-  // 生成连接线路径
   const getLinkPath = (link) => {
     const sourceIdx = topology.nodes.findIndex(n => n.id === link.source)
     const targetIdx = topology.nodes.findIndex(n => n.id === link.target)
-    
     if (sourceIdx === -1 || targetIdx === -1) return ''
     
     const source = topology.nodes[sourceIdx]
     const target = topology.nodes[targetIdx]
-    
     const sourcePos = getNodePosition(source.id, sourceIdx, topology.nodes.length)
     const targetPos = getNodePosition(target.id, targetIdx, topology.nodes.length)
     
@@ -80,13 +77,11 @@ function Topology() {
     const startY = sourcePos.y + nodeHeight / 2
     const endX = targetPos.x
     const endY = targetPos.y - nodeHeight / 2
-    
-    // 使用贝塞尔曲线
     const midY = (startY + endY) / 2
+    
     return `M ${startX} ${startY} Q ${startX} ${midY}, ${(startX + endX) / 2} ${midY} T ${endX} ${endY}`
   }
 
-  // 获取连接线颜色
   const getLinkColor = (type) => {
     switch (type) {
       case 'coordination': return '#818cf8'
@@ -97,7 +92,6 @@ function Topology() {
     }
   }
 
-  // 获取连接线标签
   const getLinkLabel = (type) => {
     switch (type) {
       case 'coordination': return '协调'
@@ -108,7 +102,6 @@ function Topology() {
     }
   }
 
-  // 获取节点状态颜色
   const getStatusColor = (status) => {
     switch (status) {
       case 'online': return '#10b981'
@@ -117,11 +110,8 @@ function Topology() {
     }
   }
 
-  // 处理节点点击
   const handleNodeClick = (nodeId) => {
-    if (nodeId === 'system' || nodeId === 'network') {
-      return // 系统节点不跳转
-    }
+    if (['system', 'network'].includes(nodeId)) return
     navigate(`/agent/${nodeId}`)
   }
 
@@ -139,9 +129,9 @@ function Topology() {
         <div className="card-body">
           {/* 拓扑统计 */}
           <div className="topology-stats">
-            <span>🤖 Agent数: {topology.stats?.totalAgents || 0}</span>
+            <span>🤖 Agent: {topology.stats?.totalAgents || 0}</span>
             <span>✅ 活跃: {topology.stats?.activeAgents || 0}</span>
-            <span>🌐 网络接口: {topology.stats?.networkInterfaces || 0}</span>
+            <span>🌐 接口: {topology.stats?.networkInterfaces || 0}</span>
             <span>💻 {topology.stats?.hostname || 'Unknown'}</span>
           </div>
           
@@ -161,7 +151,6 @@ function Topology() {
                     stroke={getLinkColor(link.type)}
                     strokeWidth="2"
                     strokeOpacity="0.6"
-                    strokeDasharray={link.type === 'dependency' ? '5,3' : 'none'}
                   />
                 ))}
                 
@@ -181,22 +170,8 @@ function Topology() {
                   
                   return (
                     <g key={`label-${idx}`}>
-                      <rect
-                        x={midX - 18}
-                        y={midY - 8}
-                        width="36"
-                        height="16"
-                        fill="#1e293b"
-                        rx="4"
-                      />
-                      <text
-                        x={midX}
-                        y={midY + 3}
-                        fill="#94a3b8"
-                        fontSize="9"
-                        textAnchor="middle"
-                        fontFamily="system-ui, sans-serif"
-                      >
+                      <rect x={midX - 18} y={midY - 8} width="36" height="16" fill="#1e293b" rx="4" />
+                      <text x={midX} y={midY + 3} fill="#94a3b8" fontSize="9" textAnchor="middle" fontFamily="system-ui, sans-serif">
                         {getLinkLabel(link.type)}
                       </text>
                     </g>
@@ -208,16 +183,14 @@ function Topology() {
               <g className="nodes">
                 {topology.nodes.map((node, idx) => {
                   const pos = getNodePosition(node.id, idx, topology.nodes.length)
-                  const isClickable = node.id !== 'system' && node.id !== 'network'
+                  const isClickable = !['system', 'network'].includes(node.id)
                   
                   return (
                     <g 
                       key={node.id} 
-                      className={`topo-node ${isClickable ? 'clickable' : ''}`}
                       style={{ cursor: isClickable ? 'pointer' : 'default' }}
                       onClick={() => handleNodeClick(node.id)}
                     >
-                      {/* 节点背景 */}
                       <rect
                         x={pos.x - nodeWidth / 2}
                         y={pos.y - nodeHeight / 2}
@@ -229,7 +202,6 @@ function Topology() {
                         strokeWidth="2"
                       />
                       
-                      {/* 状态指示灯 */}
                       <circle
                         cx={pos.x + nodeWidth / 2 - 12}
                         cy={pos.y - nodeHeight / 2 + 10}
@@ -237,48 +209,27 @@ function Topology() {
                         fill={getStatusColor(node.status)}
                       >
                         {node.status === 'online' && (
-                          <animate
-                            attributeName="opacity"
-                            values="1;0.5;1"
-                            dur="2s"
-                            repeatCount="indefinite"
-                          />
+                          <animate attributeName="opacity" values="1;0.5;1" dur="2s" repeatCount="indefinite" />
                         )}
                       </circle>
                       
-                      {/* Emoji */}
-                      <text
-                        x={pos.x - nodeWidth / 2 + 12}
-                        y={pos.y + 5}
-                        fontSize="20"
-                        fontFamily="system-ui, sans-serif"
-                      >
+                      <text x={pos.x - nodeWidth / 2 + 12} y={pos.y + 5} fontSize="20" fontFamily="system-ui, sans-serif">
                         {node.emoji}
                       </text>
                       
-                      {/* 节点名称 */}
-                      <text
-                        x={pos.x + 5}
-                        y={pos.y + 4}
-                        fill="#e2e8f0"
-                        fontSize="11"
-                        fontWeight="500"
-                        fontFamily="system-ui, sans-serif"
-                      >
-                        {node.name.length > 9 ? node.name.slice(0, 9) + '...' : node.name}
+                      <text x={pos.x + 5} y={pos.y + 4} fill="#e2e8f0" fontSize="11" fontWeight="500" fontFamily="system-ui, sans-serif">
+                        {node.name.length > 10 ? node.name.slice(0, 10) + '...' : node.name}
                       </text>
                       
-                      {/* 角色标签 */}
-                      <text
-                        x={pos.x}
-                        y={pos.y + 18}
-                        fill="#64748b"
-                        fontSize="8"
-                        textAnchor="middle"
-                        fontFamily="system-ui, sans-serif"
-                      >
+                      <text x={pos.x} y={pos.y + 18} fill="#64748b" fontSize="8" textAnchor="middle" fontFamily="system-ui, sans-serif">
                         {node.role}
                       </text>
+                      
+                      {node.tokens > 0 && (
+                        <text x={pos.x} y={pos.y + 30} fill="#818cf8" fontSize="7" textAnchor="middle" fontFamily="system-ui, sans-serif">
+                          {node.tokens >= 1000 ? (node.tokens / 1000).toFixed(0) + 'K' : node.tokens} tokens
+                        </text>
+                      )}
                     </g>
                   )
                 })}
@@ -315,7 +266,7 @@ function Topology() {
           </div>
           
           <p style={{ textAlign: 'center', marginTop: '0.75rem', fontSize: '0.75rem', color: '#64748b' }}>
-            💡 点击 Agent 节点可查看详情
+            💡 点击 Agent 节点查看详情（系统节点除外）
           </p>
         </div>
       </div>

@@ -640,6 +640,83 @@ body {
   color: var(--text-secondary);
 }
 
+/* Agent Metrics */
+.agent-metrics {
+  display: flex;
+  gap: 0.75rem;
+  margin: 0.75rem 0;
+  padding: 0.5rem;
+  background: var(--bg-card);
+  border-radius: 0.375rem;
+}
+
+.metric {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  flex: 1;
+}
+
+.metric-label {
+  font-size: 0.65rem;
+  color: var(--text-secondary);
+}
+
+.metric-value {
+  font-weight: 600;
+  color: var(--primary-light);
+  font-size: 0.85rem;
+}
+
+/* Agent Tasks Preview */
+.agent-tasks-preview {
+  margin-top: 0.75rem;
+  padding: 0.5rem;
+  background: var(--bg-card);
+  border-radius: 0.375rem;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+/* Task Group */
+.task-group {
+  margin-bottom: 1rem;
+}
+
+.task-group:last-child {
+  margin-bottom: 0;
+}
+
+.task-group-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+  padding: 0.5rem;
+  background: var(--bg-card);
+  border-radius: 0.375rem;
+}
+
+.task-group-emoji {
+  font-size: 1rem;
+}
+
+.task-group-name {
+  font-weight: 500;
+  font-size: 0.85rem;
+  flex: 1;
+}
+
+.task-group-count {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+.task-status {
+  font-size: 0.7rem;
+  font-weight: 500;
+}
+
 /* Scrollbar */
 ::-webkit-scrollbar {
   width: 6px;

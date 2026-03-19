@@ -1,14 +1,13 @@
 import { useState, useEffect } from 'react'
-import { useParams, useNavigate, Link } from 'react-router-dom'
+import { useParams, useNavigate } from 'react-router-dom'
 import { agentAPI } from '../api'
 
 function AgentDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
   const [agent, setAgent] = useState(null)
-  const [history, setHistory] = useState([])
+  const [sessions, setSessions] = useState([])
   const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState('info')
 
   useEffect(() => {
     loadAgentDetail()
@@ -16,12 +15,9 @@ function AgentDetail() {
 
   const loadAgentDetail = async () => {
     try {
-      const [agentRes, historyRes] = await Promise.all([
-        agentAPI.getAgent(id),
-        agentAPI.getAgentHistory(id)
-      ])
-      setAgent(agentRes.data)
-      setHistory(historyRes.data || [])
+      const res = await agentAPI.getAgent(id)
+      setAgent(res.data)
+      setSessions(res.data.sessions || [])
     } catch (error) {
       console.error('加载 Agent 详情失败:', error)
     }
@@ -32,7 +28,6 @@ function AgentDetail() {
     if (!isoString) return '-'
     const date = new Date(isoString)
     return date.toLocaleString('zh-CN', {
-      year: 'numeric',
       month: '2-digit',
       day: '2-digit',
       hour: '2-digit',
@@ -40,47 +35,28 @@ function AgentDetail() {
     })
   }
 
-  const formatDuration = (seconds) => {
-    if (!seconds) return '-'
-    if (seconds < 60) return `${seconds}秒`
-    if (seconds < 3600) return `${Math.floor(seconds / 60)}分钟`
-    return `${Math.floor(seconds / 3600)}小时${Math.floor((seconds % 3600) / 60)}分钟`
+  const formatTokenCount = (tokens) => {
+    if (!tokens) return '0'
+    if (tokens >= 1000000) return (tokens / 1000000).toFixed(1) + 'M'
+    if (tokens >= 1000) return (tokens / 1000).toFixed(1) + 'K'
+    return tokens.toString()
   }
 
-  const getStatusLabel = (status) => {
+  const getStatusColor = (status) => {
     switch (status) {
-      case 'online': return '在线'
+      case 'active': return '#10b981'
+      case 'idle': return '#f59e0b'
+      case 'offline': return '#64748b'
+      default: return '#64748b'
+    }
+  }
+
+  const getStatusText = (status) => {
+    switch (status) {
+      case 'active': return '活跃'
       case 'idle': return '空闲'
       case 'offline': return '离线'
-      default: return status
-    }
-  }
-
-  const getStatusClass = (status) => {
-    switch (status) {
-      case 'online': return 'success'
-      case 'idle': return 'warning'
-      default: return ''
-    }
-  }
-
-  const getTaskStatusLabel = (status) => {
-    switch (status) {
-      case 'completed': return '已完成'
-      case 'running': return '进行中'
-      case 'pending': return '等待中'
-      case 'failed': return '失败'
-      default: return status
-    }
-  }
-
-  const getTaskStatusClass = (status) => {
-    switch (status) {
-      case 'completed': return 'success'
-      case 'running': return 'primary'
-      case 'pending': return 'warning'
-      case 'failed': return 'error'
-      default: ''
+      default: return '未知'
     }
   }
 
@@ -105,7 +81,7 @@ function AgentDetail() {
       <button 
         className="back-btn"
         onClick={() => navigate(-1)}
-        style={{ marginBottom: '1rem' }}
+        style={{ marginBottom: '1rem', background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text-secondary)', padding: '0.5rem 1rem', borderRadius: '0.375rem', cursor: 'pointer' }}
       >
         ← 返回
       </button>
@@ -117,7 +93,7 @@ function AgentDetail() {
             width: '80px', 
             height: '80px', 
             borderRadius: '16px', 
-            background: '#1e293b', 
+            background: 'var(--bg-hover)', 
             display: 'flex', 
             alignItems: 'center', 
             justifyContent: 'center',
@@ -127,15 +103,18 @@ function AgentDetail() {
           </div>
           <div style={{ flex: 1 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-              <h2 style={{ margin: 0, fontSize: '1.5rem', color: '#f1f5f9' }}>{agent.name}</h2>
-              <span className={`agent-status status-${agent.status}`}>
-                <span className="status-dot"></span>
-                {getStatusLabel(agent.status)}
+              <h2 style={{ margin: 0, fontSize: '1.5rem', color: 'var(--text-primary)' }}>{agent.name}</h2>
+              <span 
+                className={`agent-status status-${agent.status}`}
+                style={{ background: `${getStatusColor(agent.status)}20`, color: getStatusColor(agent.status) }}
+              >
+                <span className="status-dot" style={{ backgroundColor: getStatusColor(agent.status) }}></span>
+                {getStatusText(agent.status)}
               </span>
             </div>
-            <p style={{ margin: '0.25rem 0 0', color: '#94a3b8' }}>{agent.role}</p>
-            <div style={{ marginTop: '0.5rem', fontSize: '0.8rem', color: '#64748b' }}>
-              ID: {agent.id} • 最后活跃: {formatTime(agent.lastActive)}
+            <p style={{ margin: '0.25rem 0 0', color: 'var(--text-secondary)' }}>{agent.role}</p>
+            <div style={{ marginTop: '0.5rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+              ID: {agent.id} • 最后活跃: {agent.lastActiveAgo || '从未'}
             </div>
           </div>
           <div style={{ display: 'flex', gap: '0.5rem' }}>
@@ -144,238 +123,117 @@ function AgentDetail() {
         </div>
       </div>
 
-      {/* Tab 切换 */}
-      <div className="tabs" style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
-        <button 
-          className={`tab-btn ${activeTab === 'info' ? 'active' : ''}`}
-          onClick={() => setActiveTab('info')}
-        >
-          📊 详细信息
-        </button>
-        <button 
-          className={`tab-btn ${activeTab === 'history' ? 'active' : ''}`}
-          onClick={() => setActiveTab('history')}
-        >
-          📋 历史会话 ({history.length})
-        </button>
-        <button 
-          className={`tab-btn ${activeTab === 'tasks' ? 'active' : ''}`}
-          onClick={() => setActiveTab('tasks')}
-        >
-          📝 任务记录
-        </button>
+      {/* 详细信息卡片 */}
+      <div className="card" style={{ marginBottom: '1rem' }}>
+        <div className="card-header">
+          <h3 className="card-title">📊 {agent.name} 详细信息</h3>
+        </div>
+        <div className="card-body">
+          {/* 核心指标 */}
+          <div style={{ marginBottom: '1.5rem' }}>
+            <h4 style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', marginBottom: '0.75rem' }}>核心指标</h4>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem' }}>
+              <div style={{ padding: '1rem', background: 'var(--bg-hover)', borderRadius: '0.5rem', textAlign: 'center' }}>
+                <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: 'var(--primary-light)' }}>
+                  {formatTokenCount(agent.tokenUsage)}
+                </div>
+                <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Token 用量</div>
+              </div>
+              <div style={{ padding: '1rem', background: 'var(--bg-hover)', borderRadius: '0.5rem', textAlign: 'center' }}>
+                <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: 'var(--success)' }}>
+                  {agent.sessionCount || 0}
+                </div>
+                <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>会话数</div>
+              </div>
+              <div style={{ padding: '1rem', background: 'var(--bg-hover)', borderRadius: '0.5rem', textAlign: 'center' }}>
+                <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: 'var(--warning)' }}>
+                  {formatTokenCount(agent.inputTokens)}
+                </div>
+                <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>输入 Token</div>
+              </div>
+              <div style={{ padding: '1rem', background: 'var(--bg-hover)', borderRadius: '0.5rem', textAlign: 'center' }}>
+                <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#818cf8' }}>
+                  {formatTokenCount(agent.outputTokens)}
+                </div>
+                <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>输出 Token</div>
+              </div>
+            </div>
+          </div>
+
+          {/* 基本信息 */}
+          <div>
+            <h4 style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', marginBottom: '0.75rem' }}>基本信息</h4>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0.75rem', background: 'var(--bg-hover)', borderRadius: '0.5rem' }}>
+                <span style={{ color: 'var(--text-secondary)' }}>🤖 模型</span>
+                <span style={{ color: 'var(--text-primary)', fontWeight: '500' }}>{agent.model || '未知'}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0.75rem', background: 'var(--bg-hover)', borderRadius: '0.5rem' }}>
+                <span style={{ color: 'var(--text-secondary)' }}>📡 渠道</span>
+                <span style={{ color: 'var(--text-primary)', fontWeight: '500' }}>{agent.channel || '无'}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0.75rem', background: 'var(--bg-hover)', borderRadius: '0.5rem' }}>
+                <span style={{ color: 'var(--text-secondary)' }}>⏱️ 最后活跃</span>
+                <span style={{ color: 'var(--text-primary)', fontWeight: '500' }}>{agent.lastActiveAgo || '从未'}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0.75rem', background: 'var(--bg-hover)', borderRadius: '0.5rem' }}>
+                <span style={{ color: 'var(--text-secondary)' }}>🔀 子Agent调用</span>
+                <span style={{ color: 'var(--text-primary)', fontWeight: '500' }}>{agent.spawnCount || 0}</span>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
-      {/* Tab 内容 */}
-      {activeTab === 'info' && (
-        <div className="card">
-          <div className="card-header">
-            <h3 className="card-title">📊 Agent 详细信息</h3>
-          </div>
-          <div className="card-body">
-            {/* 实时指标 */}
-            <div style={{ marginBottom: '1.5rem' }}>
-              <h4 style={{ fontSize: '0.9rem', color: '#94a3b8', marginBottom: '0.75rem' }}>实时状态</h4>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
-                <div className="metric-card">
-                  <div className="metric-label">内存使用</div>
-                  <div className="metric-value">{agent.memory}%</div>
-                  <div className="metric-bar" style={{ height: '6px', background: '#334155', borderRadius: '3px', marginTop: '0.5rem' }}>
-                    <div 
-                      className="metric-fill" 
-                      style={{ 
-                        width: `${agent.memory}%`, 
-                        background: agent.memory > 80 ? '#ef4444' : agent.memory > 60 ? '#f59e0b' : '#10b981',
-                        height: '100%',
-                        borderRadius: '3px'
-                      }}
-                    ></div>
-                  </div>
-                </div>
-                <div className="metric-card">
-                  <div className="metric-label">CPU 使用率</div>
-                  <div className="metric-value">{(agent.cpu || 0)}%</div>
-                  <div className="metric-bar" style={{ height: '6px', background: '#334155', borderRadius: '3px', marginTop: '0.5rem' }}>
-                    <div 
-                      className="metric-fill" 
-                      style={{ 
-                        width: `${(agent.cpu || 0) * 10}%`, 
-                        background: (agent.cpu || 0) > 80 ? '#ef4444' : (agent.cpu || 0) > 60 ? '#f59e0b' : '#10b981',
-                        height: '100%',
-                        borderRadius: '3px'
-                      }}
-                    ></div>
-                  </div>
-                </div>
-                <div className="metric-card">
-                  <div className="metric-label">当前任务</div>
-                  <div className="metric-value" style={{ fontSize: '0.9rem' }}>{agent.currentTask || '无'}</div>
-                </div>
-                <div className="metric-card">
-                  <div className="metric-label">运行时间</div>
-                  <div className="metric-value">{formatDuration(agent.uptime)}</div>
-                </div>
-              </div>
-            </div>
-
-            {/* 能力列表 */}
-            {agent.capabilities && agent.capabilities.length > 0 && (
-              <div style={{ marginBottom: '1.5rem' }}>
-                <h4 style={{ fontSize: '0.9rem', color: '#94a3b8', marginBottom: '0.75rem' }}>🎯 能力</h4>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
-                  {agent.capabilities.map((cap, idx) => (
-                    <span 
-                      key={idx}
-                      style={{ 
-                        padding: '0.25rem 0.75rem', 
-                        background: '#334155', 
-                        borderRadius: '999px',
-                        fontSize: '0.8rem',
-                        color: '#e2e8f0'
-                      }}
-                    >
-                      {cap}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* 统计数据 */}
-            <div>
-              <h4 style={{ fontSize: '0.9rem', color: '#94a3b8', marginBottom: '0.75rem' }}>📈 统计</h4>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem' }}>
-                <div style={{ textAlign: 'center', padding: '1rem', background: '#1e293b', borderRadius: '8px' }}>
-                  <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#10b981' }}>{agent.stats?.completedTasks || 0}</div>
-                  <div style={{ fontSize: '0.8rem', color: '#64748b' }}>已完成任务</div>
-                </div>
-                <div style={{ textAlign: 'center', padding: '1rem', background: '#1e293b', borderRadius: '8px' }}>
-                  <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#f59e0b' }}>{agent.stats?.activeTasks || 0}</div>
-                  <div style={{ fontSize: '0.8rem', color: '#64748b' }}>进行中</div>
-                </div>
-                <div style={{ textAlign: 'center', padding: '1rem', background: '#1e293b', borderRadius: '8px' }}>
-                  <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#818cf8' }}>{agent.stats?.totalSessions || 0}</div>
-                  <div style={{ fontSize: '0.8rem', color: '#64748b' }}>总会话数</div>
-                </div>
-                <div style={{ textAlign: 'center', padding: '1rem', background: '#1e293b', borderRadius: '8px' }}>
-                  <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#e2e8f0' }}>{agent.stats?.successRate || 0}%</div>
-                  <div style={{ fontSize: '0.8rem', color: '#64748b' }}>成功率</div>
-                </div>
-              </div>
-            </div>
-          </div>
+      {/* 会话历史 */}
+      <div className="card">
+        <div className="card-header">
+          <h3 className="card-title">📋 相关会话 ({sessions.length})</h3>
         </div>
-      )}
-
-      {activeTab === 'history' && (
-        <div className="card">
-          <div className="card-header">
-            <h3 className="card-title">📋 历史会话</h3>
-          </div>
-          <div className="card-body">
-            {history.length === 0 ? (
-              <div className="empty" style={{ padding: '2rem' }}>暂无历史会话</div>
-            ) : (
-              <div className="history-list">
-                {history.map((item, idx) => (
-                  <div 
-                    key={idx} 
-                    className="history-item"
-                    style={{ 
-                      padding: '1rem', 
-                      borderBottom: idx < history.length - 1 ? '1px solid #334155' : 'none',
-                      display: 'flex',
-                      gap: '1rem',
-                      alignItems: 'flex-start'
-                    }}
-                  >
-                    <div style={{ 
-                      width: '36px', 
-                      height: '36px', 
-                      borderRadius: '8px', 
-                      background: '#334155',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontSize: '18px',
-                      flexShrink: 0
+        <div className="card-body">
+          {sessions.length === 0 ? (
+            <div className="empty" style={{ padding: '2rem' }}>暂无会话记录</div>
+          ) : (
+            <div className="session-list">
+              {sessions.map((session, idx) => (
+                <div 
+                  key={idx}
+                  style={{ 
+                    padding: '1rem', 
+                    borderBottom: idx < sessions.length - 1 ? '1px solid var(--border)' : 'none'
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <div>
+                      <div style={{ fontWeight: '500', color: 'var(--text-primary)' }}>
+                        {session.key || `会话 ${idx + 1}`}
+                      </div>
+                      <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '0.25rem' }}>
+                        🕐 {formatTime(session.updatedAt)} 
+                        {session.totalTokens && ` • 🎯 ${formatTokenCount(session.totalTokens)} tokens`}
+                      </div>
+                    </div>
+                    <span style={{ 
+                      fontSize: '0.75rem', 
+                      padding: '0.25rem 0.5rem', 
+                      borderRadius: '0.25rem',
+                      background: session.abortedLastRun ? 'rgba(245, 158, 11, 0.15)' : 'rgba(16, 185, 129, 0.15)',
+                      color: session.abortedLastRun ? 'var(--warning)' : 'var(--success)'
                     }}>
-                      {item.type === 'task' ? '📝' : item.type === 'chat' ? '💬' : '🔧'}
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <div style={{ fontWeight: '500', color: '#e2e8f0' }}>{item.title}</div>
-                        <span className={`task-status status-${getTaskStatusClass(item.status)}`}>
-                          {getTaskStatusLabel(item.status)}
-                        </span>
-                      </div>
-                      <div style={{ fontSize: '0.85rem', color: '#94a3b8', marginTop: '0.25rem' }}>
-                        {item.description}
-                      </div>
-                      <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.5rem' }}>
-                        🕐 {formatTime(item.startTime)} 
-                        {item.duration && ` • ⏱️ ${formatDuration(item.duration)}`}
-                      </div>
-                    </div>
+                      {session.abortedLastRun ? '已终止' : '运行中'}
+                    </span>
                   </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {activeTab === 'tasks' && (
-        <div className="card">
-          <div className="card-header">
-            <h3 className="card-title">📝 任务记录</h3>
-          </div>
-          <div className="card-body">
-            {history.filter(h => h.type === 'task').length === 0 ? (
-              <div className="empty" style={{ padding: '2rem' }}>暂无任务记录</div>
-            ) : (
-              <div className="tasks-list">
-                {history.filter(h => h.type === 'task').map((task, idx) => (
-                  <div 
-                    key={idx}
-                    style={{ 
-                      padding: '1rem', 
-                      borderBottom: idx < history.filter(h => h.type === 'task').length - 1 ? '1px solid #334155' : 'none'
-                    }}
-                  >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                        <span className={`task-status status-${getTaskStatusClass(task.status)}`}>
-                          {getTaskStatusLabel(task.status)}
-                        </span>
-                        <span style={{ fontWeight: '500', color: '#e2e8f0' }}>{task.title}</span>
-                      </div>
-                      <span style={{ fontSize: '0.8rem', color: '#64748b' }}>
-                        {formatDuration(task.duration)}
-                      </span>
+                  {session.model && (
+                    <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.5rem' }}>
+                      🤖 模型: {session.model}
                     </div>
-                    <div style={{ fontSize: '0.85rem', color: '#94a3b8', marginTop: '0.5rem' }}>
-                      {task.description}
-                    </div>
-                    {task.result && (
-                      <div style={{ 
-                        marginTop: '0.75rem', 
-                        padding: '0.75rem', 
-                        background: '#0f172a', 
-                        borderRadius: '6px',
-                        fontSize: '0.8rem',
-                        color: '#94a3b8'
-                      }}>
-                        📤 结果: {task.result}
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
-      )}
+      </div>
     </div>
   )
 }
