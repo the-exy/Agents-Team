@@ -29,6 +29,7 @@ function Dashboard() {
   }
 
   const formatTime = (isoString) => {
+    if (!isoString) return '从未'
     const date = new Date(isoString)
     const now = new Date()
     const diff = Math.floor((now - date) / 1000)
@@ -42,6 +43,26 @@ function Dashboard() {
   // 跳转到 Agent 详情页
   const handleAgentClick = (agentId) => {
     navigate(`/agent/${agentId}`)
+  }
+
+  // 获取状态颜色
+  const getStatusColor = (status) => {
+    switch (status) {
+      case 'active': return '#10b981'
+      case 'idle': return '#f59e0b'
+      case 'offline': return '#64748b'
+      default: return '#64748b'
+    }
+  }
+
+  // 获取状态文字
+  const getStatusText = (status) => {
+    switch (status) {
+      case 'active': return '活跃'
+      case 'idle': return '空闲'
+      case 'offline': return '离线'
+      default: return '未知'
+    }
   }
 
   if (loading) {
@@ -87,7 +108,7 @@ function Dashboard() {
         <div className="card-body">
           <div className="agents-grid">
             {agents.map(agent => (
-              <div key={agent.id} className="agent-card">
+              <div key={agent.id} className="agent-card" onClick={() => handleAgentClick(agent.id)} style={{ cursor: 'pointer' }}>
                 <div className="agent-header">
                   <div className="agent-emoji">{agent.emoji}</div>
                   <div className="agent-info">
@@ -95,31 +116,36 @@ function Dashboard() {
                     <p>{agent.role}</p>
                   </div>
                   <span className={`agent-status status-${agent.status}`}>
-                    <span className="status-dot"></span>
-                    {agent.status === 'online' ? '在线' : agent.status === 'idle' ? '空闲' : '离线'}
+                    <span className="status-dot" style={{ backgroundColor: getStatusColor(agent.status) }}></span>
+                    {getStatusText(agent.status)}
                   </span>
                 </div>
                 <div className="agent-task">
-                  📝 {agent.currentTask}
+                  📝 {agent.lastActiveAgo || '从未活跃'}
                 </div>
                 <div className="agent-metrics">
-                  <div className="metric">
-                    💾 内存
-                    <div className="metric-bar">
-                      <div className="metric-fill memory" style={{ width: `${agent.memory}%` }}></div>
-                    </div>
-                    {agent.memory}%
+                  <div className="metric" title={`累计 Token: ${agent.tokenUsage}`}>
+                    🎯 Token用量
+                    <div className="metric-value">{agent.tokenUsageFormatted || '0'}</div>
                   </div>
-                  <div className="metric">
-                    ⚡ CPU
-                    <div className="metric-bar">
-                      <div className="metric-fill cpu" style={{ width: `${agent.cpu * 10}%` }}></div>
-                    </div>
-                    {agent.cpu}%
+                  <div className="metric" title={`会话数: ${agent.sessionCount}`}>
+                    💬 会话数
+                    <div className="metric-value">{agent.sessionCount || 0}</div>
                   </div>
                 </div>
-                <div style={{ marginTop: '0.5rem', fontSize: '0.7rem', color: '#94a3b8' }}>
-                  🕐 最后活跃: {formatTime(agent.lastActive)}
+                <div className="agent-details">
+                  <div className="detail-item">
+                    <span className="detail-label">📡 渠道</span>
+                    <span className="detail-value">{agent.channelSummary || '无'}</span>
+                  </div>
+                  <div className="detail-item">
+                    <span className="detail-label">🤖 模型</span>
+                    <span className="detail-value">{agent.modelSummary || '未知'}</span>
+                  </div>
+                  <div className="detail-item">
+                    <span className="detail-label">🔀 子Agent</span>
+                    <span className="detail-value">{agent.spawnCount || 0}</span>
+                  </div>
                 </div>
               </div>
             ))}

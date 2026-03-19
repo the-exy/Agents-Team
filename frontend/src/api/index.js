@@ -13,6 +13,12 @@ export const agentAPI = {
   getAgentHistory: (id) => api.get(`/agents/${id}/history`)
 };
 
+export const projectAPI = {
+  getProjects: () => api.get('/projects'),
+  getProject: (id) => api.get(`/projects/${id}`),
+  getProjectTasks: (id) => api.get(`/projects/${id}/tasks`)
+};
+
 export const taskAPI = {
   getTasks: () => api.get('/tasks')
 };

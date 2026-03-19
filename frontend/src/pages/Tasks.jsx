@@ -1,48 +1,67 @@
 import { useState, useEffect } from 'react'
-import { taskAPI, agentAPI } from '../api'
+import { projectAPI } from '../api'
 
 function Tasks() {
-  const [tasks, setTasks] = useState([])
-  const [agents, setAgents] = useState([])
+  const [projects, setProjects] = useState([])
+  const [selectedProject, setSelectedProject] = useState(null)
+  const [projectTasks, setProjectTasks] = useState([])
   const [loading, setLoading] = useState(true)
-  const [filter, setFilter] = useState('all')
 
   useEffect(() => {
-    loadData()
-    const interval = setInterval(loadData, 5000)
-    return () => clearInterval(interval)
+    loadProjects()
   }, [])
 
-  const loadData = async () => {
+  const loadProjects = async () => {
     try {
-      const [tasksRes, agentsRes] = await Promise.all([
-        taskAPI.getTasks(),
-        agentAPI.getAgents()
-      ])
-      setTasks(tasksRes.data)
-      setAgents(agentsRes.data)
+      const res = await projectAPI.getProjects()
+      setProjects(res.data)
     } catch (error) {
-      console.error('加载数据失败:', error)
+      console.error('加载项目失败:', error)
     }
     setLoading(false)
   }
 
-  const getAgentName = (agentId) => {
-    const agent = agents.find(a => a.id === agentId)
-    return agent ? `${agent.emoji} ${agent.name}` : agentId
+  const loadProjectTasks = async (projectId) => {
+    try {
+      const res = await projectAPI.getProjectTasks(projectId)
+      setProjectTasks(res.data)
+    } catch (error) {
+      console.error('加载任务失败:', error)
+      setProjectTasks([])
+    }
+  }
+
+  const handleProjectClick = async (project) => {
+    if (selectedProject?.id === project.id) {
+      setSelectedProject(null)
+      setProjectTasks([])
+    } else {
+      setSelectedProject(project)
+      await loadProjectTasks(project.id)
+    }
+  }
+
+  const getStatusColor = (status) => {
+    switch (status) {
+      case 'active': return '#10b981'
+      case 'planning': return '#f59e0b'
+      case 'completed': return '#6366f1'
+      default: return '#64748b'
+    }
+  }
+
+  const getStatusText = (status) => {
+    switch (status) {
+      case 'active': return '进行中'
+      case 'planning': return '规划中'
+      case 'completed': return '已完成'
+      default: return '未知'
+    }
   }
 
   const formatDate = (isoString) => {
     const date = new Date(isoString)
-    return date.toLocaleString('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
-  }
-
-  const filteredTasks = filter === 'all' ? tasks : tasks.filter(t => t.status === filter)
-
-  const statusMap = {
-    in_progress: { label: '进行中', class: 'progress-in_progress' },
-    completed: { label: '已完成', class: 'progress-completed' },
-    waiting: { label: '等待中', class: 'progress-waiting' }
+    return date.toLocaleString('zh-CN', { month: 'short', day: 'numeric' })
   }
 
   if (loading) {
@@ -53,71 +72,75 @@ function Tasks() {
     <div>
       <div className="card">
         <div className="card-header">
-          <h2 className="card-title">📋 任务看板</h2>
-          <div style={{ display: 'flex', gap: '0.5rem' }}>
-            <button 
-              className={`refresh-btn ${filter === 'all' ? 'active' : ''}`}
-              onClick={() => setFilter('all')}
-              style={{ background: filter === 'all' ? '#4f46e5' : '' }}
-            >
-              全部
-            </button>
-            <button 
-              className={`refresh-btn ${filter === 'in_progress' ? 'active' : ''}`}
-              onClick={() => setFilter('in_progress')}
-              style={{ background: filter === 'in_progress' ? '#4f46e5' : '' }}
-            >
-              进行中
-            </button>
-            <button 
-              className={`refresh-btn ${filter === 'waiting' ? 'active' : ''}`}
-              onClick={() => setFilter('waiting')}
-              style={{ background: filter === 'waiting' ? '#4f46e5' : '' }}
-            >
-              等待中
-            </button>
-            <button 
-              className={`refresh-btn ${filter === 'completed' ? 'active' : ''}`}
-              onClick={() => setFilter('completed')}
-              style={{ background: filter === 'completed' ? '#4f46e5' : '' }}
-            >
-              已完成
-            </button>
-          </div>
+          <h2 className="card-title">📋 项目管理</h2>
+          <span style={{ fontSize: '0.8rem', color: '#94a3b8' }}>
+            共 {projects.length} 个项目
+          </span>
         </div>
         <div className="card-body">
-          {filteredTasks.length === 0 ? (
-            <div className="empty">暂无任务</div>
+          {projects.length === 0 ? (
+            <div className="empty">暂无项目</div>
           ) : (
-            <div className="task-list">
-              {filteredTasks.map(task => (
-                <div key={task.id} className="task-item">
-                  <div className="task-header">
-                    <h3 className="task-title">{task.title}</h3>
-                    <span className={`task-priority priority-${task.priority}`}>
-                      {task.priority === 'high' ? '高优先' : task.priority === 'medium' ? '中优先' : '低优先'}
+            <div className="project-list">
+              {projects.map(project => (
+                <div 
+                  key={project.id} 
+                  className={`project-item ${selectedProject?.id === project.id ? 'selected' : ''}`}
+                  onClick={() => handleProjectClick(project)}
+                >
+                  <div className="project-header">
+                    <div className="project-title">
+                      <span className="project-emoji">{project.emoji}</span>
+                      <h3>{project.name}</h3>
+                    </div>
+                    <span 
+                      className="project-status"
+                      style={{ color: getStatusColor(project.status), borderColor: getStatusColor(project.status) }}
+                    >
+                      {getStatusText(project.status)}
                     </span>
                   </div>
-                  <div className="task-meta">
-                    <span className={`agent-status status-${task.status === 'completed' ? 'online' : task.status === 'in_progress' ? 'idle' : 'offline'}`}>
-                      <span className="status-dot"></span>
-                      {statusMap[task.status]?.label}
-                    </span>
-                    <span>📅 {formatDate(task.createdAt)}</span>
+                  <p className="project-description">{project.description}</p>
+                  <div className="project-meta">
+                    <span>📊 任务数: {project.taskCount}</span>
+                    <span>👥 负责: {project.agents?.join(', ') || '待分配'}</span>
+                    <span>📅 {formatDate(project.createdAt)}</span>
                   </div>
-                  <div className="task-progress">
+                  <div className="project-progress">
                     <div 
-                      className={`task-progress-fill ${statusMap[task.status]?.class}`}
-                      style={{ width: `${task.progress}%` }}
+                      className="project-progress-fill"
+                      style={{ 
+                        width: `${project.progress}%`,
+                        backgroundColor: getStatusColor(project.status)
+                      }}
                     ></div>
                   </div>
-                  <div className="task-assignees">
-                    {task.assignees.map(agentId => (
-                      <span key={agentId} className="assigninee">
-                        {getAgentName(agentId)}
-                      </span>
-                    ))}
+                  <div className="project-progress-text">
+                    进度: {project.progress}%
                   </div>
+                  
+                  {/* 展开的任务明细 */}
+                  {selectedProject?.id === project.id && (
+                    <div className="project-tasks">
+                      <h4>📝 任务明细</h4>
+                      {projectTasks.length === 0 ? (
+                        <div className="empty" style={{ padding: '1rem' }}>暂无任务明细</div>
+                      ) : (
+                        <div className="task-list">
+                          {projectTasks.map(task => (
+                            <div key={task.id} className="task-item">
+                              <div className="task-header">
+                                <h3 className="task-title">{task.title}</h3>
+                              </div>
+                              <div className="task-meta">
+                                <span className="task-type">类型: {task.type}</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
