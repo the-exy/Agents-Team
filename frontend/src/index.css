@@ -734,3 +734,332 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: var(--text-secondary);
 }
+
+/* ===== Animations ===== */
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.7; transform: scale(1.05); }
+}
+
+@keyframes glow {
+  0%, 100% { box-shadow: 0 0 5px var(--primary-light), 0 0 10px rgba(79, 70, 229, 0.3); }
+  50% { box-shadow: 0 0 15px var(--primary-light), 0 0 25px rgba(79, 70, 229, 0.5); }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-6px); }
+}
+
+@keyframes ringPulse {
+  0% { transform: scale(1); opacity: 0.4; }
+  100% { transform: scale(2); opacity: 0; }
+}
+
+@keyframes ripple {
+  0% { transform: scale(0.8); opacity: 1; }
+  100% { transform: scale(2.4); opacity: 0; }
+}
+
+@keyframes gradientShift {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes dashFlow {
+  to { stroke-dashoffset: -24; }
+}
+
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideInLeft {
+  from { opacity: 0; transform: translateX(-20px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes countUp {
+  from { opacity: 0; transform: scale(0.5); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+/* ===== Gradient Text ===== */
+.gradient-text {
+  background: linear-gradient(135deg, var(--primary-light), var(--primary), #a78bfa);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ===== Logo Animation ===== */
+.logo {
+  animation: float 4s ease-in-out infinite;
+}
+
+.logo-icon {
+  display: inline-block;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+/* ===== Stat Cards ===== */
+.stat-card {
+  position: relative;
+  overflow: hidden;
+  transition: transform 0.3s, box-shadow 0.3s;
+}
+
+.stat-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 24px rgba(79, 70, 229, 0.25);
+}
+
+.stat-card-gradient {
+  background: linear-gradient(135deg, rgba(79, 70, 229, 0.15), rgba(139, 92, 246, 0.1));
+  border: 1px solid rgba(79, 70, 229, 0.3);
+  animation: gradientShift 4s ease infinite;
+  background-size: 200% 200%;
+}
+
+.stat-card-bg {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 30% 30%, rgba(255,255,255,0.05) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+.stat-glow {
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: radial-gradient(circle, rgba(79, 70, 229, 0.1) 0%, transparent 60%);
+  animation: pulse 3s ease-in-out infinite;
+  pointer-events: none;
+}
+
+/* ===== Agent Cards ===== */
+.agent-card {
+  position: relative;
+  overflow: hidden;
+}
+
+.agent-card.status-active {
+  border-color: var(--success);
+  animation: glow 2s ease-in-out infinite;
+}
+
+.agent-card.status-active::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: radial-gradient(circle at 50% 50%, rgba(16, 185, 129, 0.08) 0%, transparent 70%);
+  animation: ripple 2s ease-out infinite;
+  pointer-events: none;
+}
+
+.agent-card.status-idle {
+  border-color: var(--warning);
+}
+
+.agent-card.status-offline {
+  opacity: 0.7;
+}
+
+/* ===== Active Indicator ===== */
+.active-indicator {
+  position: relative;
+  width: 12px;
+  height: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pulse-dot {
+  width: 8px;
+  height: 8px;
+  background: var(--success);
+  border-radius: 50%;
+  animation: pulse 1.5s ease-in-out infinite;
+  box-shadow: 0 0 8px var(--success);
+}
+
+/* ===== Skills Grid ===== */
+.skills-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.skill-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.375rem 0.75rem;
+  background: linear-gradient(135deg, rgba(79, 70, 229, 0.2), rgba(139, 92, 246, 0.15));
+  border: 1px solid rgba(79, 70, 229, 0.3);
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  color: var(--primary-light);
+  animation: fadeInUp 0.4s ease-out both;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.skill-tag:hover {
+  transform: scale(1.05);
+  box-shadow: 0 0 12px rgba(79, 70, 229, 0.3);
+}
+
+.skill-icon {
+  font-size: 0.65rem;
+}
+
+/* ===== Files List ===== */
+.files-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.file-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--bg-hover);
+  border-radius: 0.5rem;
+  transition: background 0.2s;
+}
+
+.file-item:hover {
+  background: rgba(79, 70, 229, 0.1);
+}
+
+.file-icon {
+  font-size: 1rem;
+}
+
+.file-name {
+  flex: 1;
+  font-size: 0.85rem;
+  font-family: 'Fira Code', 'Consolas', monospace;
+}
+
+.file-badge {
+  padding: 0.125rem 0.375rem;
+  background: rgba(79, 70, 229, 0.2);
+  color: var(--primary-light);
+  border-radius: 0.25rem;
+  font-size: 0.65rem;
+  font-weight: 600;
+}
+
+/* ===== Enhanced Task List ===== */
+.task-list-enhanced {
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+}
+
+.task-item-enhanced {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  background: var(--bg-hover);
+  border-radius: 0.5rem;
+  border-left: 3px solid var(--primary);
+  animation: slideInLeft 0.4s ease-out both;
+  transition: transform 0.2s;
+}
+
+.task-item-enhanced:hover {
+  transform: translateX(4px);
+}
+
+.task-status-badge {
+  padding: 0.25rem 0.625rem;
+  border-radius: 9999px;
+  font-size: 0.7rem;
+  font-weight: 500;
+}
+
+.task-status-badge.in_progress {
+  background: rgba(16, 185, 129, 0.15);
+  color: var(--success);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.task-status-badge.completed {
+  background: rgba(59, 130, 246, 0.15);
+  color: #60a5fa;
+  border: 1px solid rgba(59, 130, 246, 0.3);
+}
+
+.task-status-badge.pending {
+  background: rgba(245, 158, 11, 0.15);
+  color: var(--warning);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+/* ===== Detail Sections ===== */
+.detail-section {
+  animation: fadeInUp 0.5s ease-out both;
+}
+
+.detail-section:nth-child(2) { animation-delay: 0.1s; }
+.detail-section:nth-child(3) { animation-delay: 0.2s; }
+.detail-section:nth-child(4) { animation-delay: 0.3s; }
+.detail-section:nth-child(5) { animation-delay: 0.4s; }
+
+/* ===== Topology ===== */
+.topology-canvas {
+  filter: drop-shadow(0 0 8px rgba(79, 70, 229, 0.2));
+}
+
+/* ===== Card animations ===== */
+.card {
+  animation: fadeInUp 0.4s ease-out both;
+}
+
+/* ===== Header gradient ===== */
+.header {
+  background: linear-gradient(135deg, var(--bg-card) 0%, rgba(79, 70, 229, 0.1) 100%);
+  border-bottom: 1px solid rgba(79, 70, 229, 0.2);
+}
+
+/* ===== Refresh button animation ===== */
+.refresh-btn:active {
+  transform: rotate(180deg);
+}
+
+.refresh-icon {
+  display: inline-block;
+  transition: transform 0.3s;
+}
+
+.refresh-btn:hover .refresh-icon {
+  animation: spin 0.6s ease-in-out;
+}
+
+/* ===== Responsive ===== */
+@media (max-width: 768px) {
+  .agents-grid {
+    grid-template-columns: 1fr;
+  }
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
