@@ -792,7 +792,7 @@ app.get('/api/memorials', (req, res) => {
             title: task.title,
             description: '已完成',
             timestamp: task.completedAt ? new Date(task.completedAt).toISOString() : new Date().toISOString(),
-            timeAgo: formatTimeAgo(task.completedAt)
+            timeAgo: formatTimeAgo(task.completedAt ? task.completedAt : Date.now())
           });
         }
       }
