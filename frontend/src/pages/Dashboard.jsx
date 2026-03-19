@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { statsAPI, agentAPI } from '../api'
 
 function Dashboard() {
   const [stats, setStats] = useState(null)
   const [agents, setAgents] = useState([])
   const [loading, setLoading] = useState(true)
+  const navigate = useNavigate()
 
   useEffect(() => {
     loadData()
@@ -35,6 +37,11 @@ function Dashboard() {
     if (diff < 3600) return `${Math.floor(diff / 60)}分钟前`
     if (diff < 86400) return `${Math.floor(diff / 3600)}小时前`
     return `${Math.floor(diff / 86400)}天前`
+  }
+
+  // 跳转到 Agent 详情页
+  const handleAgentClick = (agentId) => {
+    navigate(`/agent/${agentId}`)
   }
 
   if (loading) {
