@@ -24,35 +24,56 @@ let processCache = {
 };
 const CACHE_TTL = 5000; // 5秒缓存
 
-// Agent配置 - 保留基本配置，动态数据从真实系统获取
+// Agent配置 - 来自 OpenClaw 注册的真实 Agent
 const agentConfigs = [
   {
-    id: 'system',
-    name: '系统资源',
-    emoji: '💻',
-    role: '系统监控',
-    workspace: 'system'
+    id: 'main',
+    name: '主Agent',
+    emoji: '🤖',
+    role: '协调者',
+    workspace: 'workspace'
   },
   {
-    id: 'node',
-    name: 'Node.js进程',
-    emoji: '🟢',
-    role: '运行时',
-    workspace: 'process'
+    id: 'backend',
+    name: '后端开发',
+    emoji: '⚙️',
+    role: '后端开发',
+    workspace: 'workspace-backend'
   },
   {
-    id: 'memory',
-    name: '内存管理',
-    emoji: '🧠',
-    role: '内存监控',
-    workspace: 'memory'
+    id: 'frontend',
+    name: '前端开发',
+    emoji: '🎨',
+    role: '前端开发',
+    workspace: 'workspace-frontend'
   },
   {
-    id: 'network',
-    name: '网络状态',
-    emoji: '🌐',
-    role: '网络监控',
-    workspace: 'network'
+    id: 'pm',
+    name: '产品经理',
+    emoji: '📋',
+    role: '产品经理',
+    workspace: 'workspace-pm'
+  },
+  {
+    id: 'db',
+    name: '数据库开发',
+    emoji: '🗄️',
+    role: '数据库开发',
+    workspace: 'workspace-db'
+  },
+  {
+    id: 'test',
+    name: '测试工程师',
+    emoji: '🧪',
+    role: '测试',
+    workspace: 'workspace-test'
+  },
+  {
+    id: 'ops',
+    name: '运维工程师',
+    emoji: '🔧',
+    role: '运维',
+    workspace: 'workspace-ops'
   }
 ];
 
@@ -309,69 +330,83 @@ app.get('/api/system', (req, res) => {
   }
 });
 
-// 获取Agent列表（系统监控视角）
+// 获取Agent列表（来自 OpenClaw 注册的真实 Agent）
 app.get('/api/agents', async (req, res) => {
   try {
-    const cpu = await getCpuUsage();
-    const memory = getMemoryUsage();
-    const processes = await getProcessList();
-    const network = getNetworkInfo();
-    
-    const agents = [
-      {
-        id: 'system',
-        name: '系统资源',
-        emoji: '💻',
-        role: '系统监控',
-        status: 'online',
-        workspace: os.hostname(),
-        currentTask: '系统资源监控',
-        sessions: 1,
-        memory: Math.round(memory.usage),
-        cpu: cpu.usage,
-        lastActive: new Date().toISOString()
-      },
-      {
-        id: 'node',
-        name: 'Node.js进程',
-        emoji: '🟢',
-        role: '运行时',
-        status: 'online',
-        workspace: 'process',
-        currentTask: `运行中 (PID: ${process.pid})`,
-        sessions: 1,
-        memory: Math.round(process.memoryUsage().heapUsed / 1024 / 1024),
-        cpu: Math.round(cpu.usage * 0.1 * 100) / 100,
-        lastActive: new Date().toISOString()
-      },
-      {
-        id: 'memory',
-        name: '内存管理',
-        emoji: '🧠',
-        role: '内存监控',
-        status: 'online',
-        workspace: 'memory',
-        currentTask: '内存使用监控',
-        sessions: 1,
-        memory: Math.round(memory.usage),
-        cpu: Math.round(cpu.usage * 0.05 * 100) / 100,
-        lastActive: new Date().toISOString()
-      },
-      {
-        id: 'network',
-        name: '网络状态',
-        emoji: '🌐',
-        role: '网络监控',
-        status: 'online',
-        workspace: 'network',
-        currentTask: `监控 ${network.length} 个网络接口`,
-        sessions: network.length,
-        memory: 15,
-        cpu: Math.round(cpu.usage * 0.02 * 100) / 100,
-        lastActive: new Date().toISOString()
+    // 读取真实会话数据
+    let sessionsData = {};
+    try {
+      if (fs.existsSync(SESSIONS_FILE)) {
+        sessionsData = JSON.parse(fs.readFileSync(SESSIONS_FILE, 'utf8'));
       }
-    ];
+    } catch (e) {
+      console.error('读取会话数据失败:', e.message);
+    }
+
+    // 读取任务配置
+    let tasksData = taskConfigs;
     
+    // 为每个 Agent 关联会话数据
+    const agents = agentConfigs.map(config => {
+      // 查找相关的会话
+      const relatedSessions = Object.entries(sessionsData)
+        .filter(([key, data]) => {
+          // 匹配主 Agent 或子 Agent
+          if (config.id === 'main') {
+            return key.includes('main') && !key.includes('subagent');
+          }
+          return key.includes(`subagent`) && data.label === config.id;
+        })
+        .map(([key, data]) => ({
+          key,
+          sessionId: data.sessionId,
+          updatedAt: data.updatedAt,
+          totalTokens: data.totalTokens || 0,
+          abortedLastRun: data.abortedLastRun || false
+        }));
+
+      // 最近的会话
+      const latestSession = relatedSessions.length > 0 
+        ? relatedSessions.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))[0]
+        : null;
+
+      // 判断状态
+      let status = 'idle';
+      let currentTask = '等待任务中...';
+      let lastActive = null;
+      
+      if (latestSession) {
+        lastActive = latestSession.updatedAt ? new Date(latestSession.updatedAt).toISOString() : null;
+        // 5分钟内更新视为活跃
+        const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
+        if (latestSession.updatedAt && latestSession.updatedAt > fiveMinutesAgo) {
+          status = latestSession.abortedLastRun ? 'idle' : 'active';
+          currentTask = '工作中...';
+        } else {
+          status = 'idle';
+          currentTask = '空闲';
+        }
+      }
+
+      // 统计 token
+      const totalTokens = relatedSessions.reduce((sum, s) => sum + (s.totalTokens || 0), 0);
+
+      return {
+        id: config.id,
+        name: config.name,
+        emoji: config.emoji,
+        role: config.role,
+        status: status,
+        workspace: config.workspace,
+        currentTask: currentTask,
+        sessions: relatedSessions.length,
+        totalTokens: totalTokens,
+        lastActive: lastActive,
+        cpu: 0,
+        memory: 0
+      };
+    });
+
     res.json(agents);
   } catch (error) {
     res.status(500).json({ error: error.message });
