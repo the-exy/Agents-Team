@@ -3,11 +3,16 @@ const cors = require('cors');
 const os = require('os');
 const { exec } = require('child_process');
 const util = require('util');
+const fs = require('fs');
+const path = require('path');
 
 const execPromise = util.promisify(exec);
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+
+// OpenClaw 会话文件路径
+const SESSIONS_FILE = path.join(os.homedir(), '.openclaw', 'agents', 'main', 'sessions', 'sessions.json');
 
 app.use(cors());
 app.use(express.json());
@@ -581,6 +586,49 @@ app.post('/api/logs', (req, res) => {
     time: new Date().toISOString()
   };
   res.json(newLog);
+});
+
+// 获取 OpenClaw 真实会话数据
+app.get('/api/sessions', (req, res) => {
+  try {
+    if (!fs.existsSync(SESSIONS_FILE)) {
+      return res.json({ sessions: [], count: 0 });
+    }
+    
+    const sessionsData = JSON.parse(fs.readFileSync(SESSIONS_FILE, 'utf8'));
+    
+    // 提取关键信息
+    const sessions = Object.entries(sessionsData).map(([key, data]) => ({
+      key: key,
+      sessionId: data.sessionId,
+      label: data.label || null,
+      channel: data.channel || data.deliveryContext?.channel || 'unknown',
+      lastChannel: data.lastChannel || null,
+      updatedAt: data.updatedAt,
+      model: data.model || null,
+      totalTokens: data.totalTokens || 0,
+      inputTokens: data.inputTokens || 0,
+      outputTokens: data.outputTokens || 0,
+      contextTokens: data.contextTokens || 0,
+      abortedLastRun: data.abortedLastRun || false,
+      spawnDepth: data.spawnDepth || 0,
+      subagentRole: data.subagentRole || null,
+      spawnedBy: data.spawnedBy || null
+    }));
+    
+    // 按更新时间排序
+    sessions.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+    
+    res.json({
+      sessions: sessions,
+      count: sessions.length,
+      activeCount: sessions.filter(s => !s.abortedLastRun).length,
+      subagentCount: sessions.filter(s => s.spawnDepth > 0).length,
+      totalTokens: sessions.reduce((sum, s) => sum + (s.totalTokens || 0), 0)
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
 // 健康检查
