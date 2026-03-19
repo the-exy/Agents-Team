@@ -17,7 +17,18 @@ function AgentDetail() {
     try {
       const res = await agentAPI.getAgent(id)
       setAgent(res.data)
-      setSessions(res.data.sessions || [])
+      // 简化 sessions 数据，避免渲染过大内容
+      setSessions((res.data.sessions || []).map(s => ({
+        key: s.key,
+        sessionId: s.sessionId,
+        updatedAt: s.updatedAt,
+        model: s.model,
+        totalTokens: s.totalTokens,
+        inputTokens: s.inputTokens,
+        outputTokens: s.outputTokens,
+        channel: s.lastChannel || s.channel,
+        abortedLastRun: s.abortedLastRun
+      })))
     } catch (error) {
       console.error('加载 Agent 详情失败:', error)
     }
