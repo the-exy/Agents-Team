@@ -235,6 +235,24 @@ app.get('/api/agents', (req, res) => {
       }
 
       const isActive = lastActive && lastActive > fiveMinutesAgo;
+      const oneHourAgo = Date.now() - 60 * 60 * 1000;
+      const isIdle = lastActive && lastActive > oneHourAgo;
+
+      let heartbeatStatus, heartbeatLabel, statusColor;
+      if (isActive) {
+        heartbeatStatus = 'active';
+        heartbeatLabel = '🟢 活跃';
+        statusColor = '#10b981';
+      } else if (isIdle) {
+        heartbeatStatus = 'idle';
+        heartbeatLabel = '🟡 空闲';
+        statusColor = '#f59e0b';
+      } else {
+        heartbeatStatus = 'offline';
+        heartbeatLabel = '🔴 离线';
+        statusColor = '#ef4444';
+      }
+
       const status = lastActive ? (isActive ? 'active' : 'idle') : 'offline';
 
       agents.push({
@@ -243,6 +261,9 @@ app.get('/api/agents', (req, res) => {
         emoji: config.emoji,
         role: config.role,
         status,
+        heartbeatStatus,
+        heartbeatLabel,
+        statusColor,
         tokenUsage: totalTokens,
         tokenUsageFormatted: formatTokenCount(totalTokens),
         inputTokens,
@@ -622,20 +643,32 @@ app.get('/api/topology', async (req, res) => {
 // 获取会话列表
 app.get('/api/sessions', (req, res) => {
   try {
-    const sessionsData = readSessionsData();
-    const sessions = Object.entries(sessionsData).map(([key, data]) => ({
-      key,
-      sessionId: data.sessionId,
-      label: data.label || null,
-      channel: data.channel || data.lastChannel || 'unknown',
-      updatedAt: data.updatedAt,
-      model: data.model || null,
-      totalTokens: data.totalTokens || 0,
-      inputTokens: data.inputTokens || 0,
-      outputTokens: data.outputTokens || 0,
-      abortedLastRun: data.abortedLastRun || false,
-      spawnDepth: data.spawnDepth || 0
-    }));
+    const allSessions = readAllSessionsData();
+    const sessions = [];
+
+    for (const [agentId, sessionsData] of Object.entries(allSessions)) {
+      const config = agentConfigs[agentId] || { id: agentId, name: `${agentId} Agent`, emoji: '🤖' };
+      for (const [key, data] of Object.entries(sessionsData)) {
+        sessions.push({
+          key,
+          sessionId: data.sessionId,
+          label: data.label || null,
+          channel: data.channel || data.lastChannel || 'unknown',
+          lastChannel: data.lastChannel || null,
+          updatedAt: data.updatedAt,
+          model: data.model || null,
+          totalTokens: data.totalTokens || 0,
+          inputTokens: data.inputTokens || 0,
+          outputTokens: data.outputTokens || 0,
+          abortedLastRun: data.abortedLastRun || false,
+          spawnDepth: data.spawnDepth || 0,
+          agentId,
+          agentName: config.name,
+          agentEmoji: config.emoji
+        });
+      }
+    }
+
     sessions.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
     res.json({
       sessions,
@@ -643,6 +676,133 @@ app.get('/api/sessions', (req, res) => {
       activeCount: sessions.filter(s => s.updatedAt && s.updatedAt > Date.now() - 300000).length,
       totalTokens: sessions.reduce((sum, s) => sum + (s.totalTokens || 0), 0)
     });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 获取排行榜
+app.get('/api/rankings', (req, res) => {
+  try {
+    const allSessions = readAllSessionsData();
+
+    // 计算每个 agent 的 token 使用量和会话数
+    const agentStats = {};
+    for (const [agentId, sessionsData] of Object.entries(allSessions)) {
+      const config = agentConfigs[agentId] || { id: agentId, name: `${agentId} Agent`, emoji: '🤖' };
+      let totalTokens = 0;
+      let sessionCount = 0;
+      let lastActive = null;
+
+      for (const [key, data] of Object.entries(sessionsData)) {
+        if (data.totalTokens) totalTokens += data.totalTokens;
+        sessionCount++;
+        if (data.updatedAt && (!lastActive || data.updatedAt > lastActive)) {
+          lastActive = data.updatedAt;
+        }
+      }
+
+      agentStats[agentId] = {
+        agentId,
+        agentName: config.name,
+        emoji: config.emoji,
+        tokenUsage: totalTokens,
+        sessionCount,
+        lastActive
+      };
+    }
+
+    // Token 排行榜 - 按 tokenUsage 降序，取前5
+    const tokenRanking = Object.values(agentStats)
+      .sort((a, b) => b.tokenUsage - a.tokenUsage)
+      .slice(0, 5)
+      .map((stat, idx) => ({
+        rank: idx + 1,
+        agentId: stat.agentId,
+        agentName: stat.agentName,
+        emoji: stat.emoji,
+        tokenUsage: stat.tokenUsage,
+        formatted: formatTokenCount(stat.tokenUsage)
+      }));
+
+    // 活跃度排行榜 - 按 sessionCount 降序，再按 lastActive 降序，取前5
+    const activityRanking = Object.values(agentStats)
+      .sort((a, b) => {
+        if (b.sessionCount !== a.sessionCount) return b.sessionCount - a.sessionCount;
+        return (b.lastActive || 0) - (a.lastActive || 0);
+      })
+      .slice(0, 5)
+      .map((stat, idx) => ({
+        rank: idx + 1,
+        agentId: stat.agentId,
+        agentName: stat.agentName,
+        emoji: stat.emoji,
+        sessionCount: stat.sessionCount,
+        lastActive: formatTimeAgo(stat.lastActive)
+      }));
+
+    res.json({ tokenRanking, activityRanking });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 获取纪念册（已结束的会话和已完成的任务）
+app.get('/api/memorials', (req, res) => {
+  try {
+    const allSessions = readAllSessionsData();
+    const memorialList = [];
+    const thirtyMinutesAgo = Date.now() - 30 * 60 * 1000;
+
+    // 从会话中提取已结束的会话
+    for (const [agentId, sessionsData] of Object.entries(allSessions)) {
+      const config = agentConfigs[agentId] || { id: agentId, name: `${agentId} Agent`, emoji: '🤖' };
+
+      for (const [key, data] of Object.entries(sessionsData)) {
+        const isEnded = data.abortedLastRun || (data.lastActive && data.lastActive < thirtyMinutesAgo);
+
+        if (isEnded) {
+          memorialList.push({
+            id: `session-${agentId}-${key}`,
+            type: 'session_ended',
+            agentId,
+            agentName: config.name,
+            agentEmoji: config.emoji,
+            title: `${config.name} 会话结束`,
+            description: `${data.model || '未知'} · ${formatTokenCount(data.totalTokens || 0)} tokens`,
+            timestamp: data.lastActive ? new Date(data.lastActive).toISOString() : new Date().toISOString(),
+            timeAgo: formatTimeAgo(data.lastActive)
+          });
+        }
+      }
+    }
+
+    // 从任务中提取已完成的任务
+    for (const [agentId, tasks] of Object.entries(taskConfigs)) {
+      const config = agentConfigs[agentId] || { id: agentId, name: `${agentId} Agent`, emoji: '🤖' };
+
+      for (const task of tasks) {
+        if (task.status === 'completed') {
+          memorialList.push({
+            id: `task-${agentId}-${task.id}`,
+            type: 'task_completed',
+            agentId,
+            agentName: config.name,
+            agentEmoji: config.emoji,
+            title: task.title,
+            description: '已完成',
+            timestamp: task.completedAt ? new Date(task.completedAt).toISOString() : new Date().toISOString(),
+            timeAgo: formatTimeAgo(task.completedAt)
+          });
+        }
+      }
+    }
+
+    // 按时间戳降序排序，限制50条
+    memorialList.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    const memorials = memorialList.slice(0, 50);
+
+    res.json({ memorials });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

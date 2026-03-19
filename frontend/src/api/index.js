@@ -22,6 +22,18 @@ export const projectAPI = {
   getProjectTasks: (id) => api.get(`/projects/${id}/tasks`)
 };
 
+export const sessionsAPI = {
+  getSessions: () => api.get('/sessions')
+};
+
+export const rankingsAPI = {
+  getRankings: () => api.get('/rankings')
+};
+
+export const memorialsAPI = {
+  getMemorials: () => api.get('/memorials')
+};
+
 export const taskAPI = {
   getTasks: () => api.get('/tasks')
 };

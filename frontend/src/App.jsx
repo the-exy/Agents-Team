@@ -4,6 +4,8 @@ import Dashboard from './pages/Dashboard'
 import Topology from './pages/Topology'
 import AgentDetail from './pages/AgentDetail'
 import Tasks from './pages/Tasks'
+import Sessions from './pages/Sessions'
+import Memorials from './pages/Memorials'
 import Logs from './pages/Logs'
 
 function App() {
@@ -30,6 +32,12 @@ function App() {
             <Link to="/tasks" className={`nav-link ${isActive('/tasks') ? 'active' : ''}`}>
               任务板
             </Link>
+            <Link to="/sessions" className={`nav-link ${isActive('/sessions') ? 'active' : ''}`}>
+              会话监控
+            </Link>
+            <Link to="/memorials" className={`nav-link ${isActive('/memorials') ? 'active' : ''}`}>
+              奏折阁
+            </Link>
             <Link to="/logs" className={`nav-link ${isActive('/logs') ? 'active' : ''}`}>
               活动日志
             </Link>
@@ -43,6 +51,8 @@ function App() {
           <Route path="/topology" element={<Topology />} />
           <Route path="/agent/:id" element={<AgentDetail />} />
           <Route path="/tasks" element={<Tasks />} />
+          <Route path="/sessions" element={<Sessions />} />
+          <Route path="/memorials" element={<Memorials />} />
           <Route path="/logs" element={<Logs />} />
         </Routes>
       </main>
