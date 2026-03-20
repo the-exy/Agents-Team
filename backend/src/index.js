@@ -816,21 +816,18 @@ app.get('/api/topology', async (req, res) => {
       }
     }
 
-    nodes.push({ id: 'system', name: '系统', emoji: '💻', role: '监控', status: 'online' });
-    nodes.push({ id: 'network', name: '网络', emoji: '🌐', role: '通信', status: 'online' });
-    links.push({ source: 'system', target: 'main', type: 'host' });
-    links.push({ source: 'network', target: 'main', type: 'monitor' });
+    // 【已移除】不再添加 system 和 network 节点
 
     const cpu = await getCpuUsage();
     const memory = getMemoryUsage();
     const network = getNetworkInfo();
 
     // 计算节点位置 - 基于节点数量动态布局
-    const viewBoxWidth = 1000;
-    const viewBoxHeight = 500;
-    const centerX = 400;
-    const centerY = 220;
-    const mainRadius = 280;
+    const viewBoxWidth = 1100;
+    const viewBoxHeight = 700;
+    const centerX = 500;
+    const centerY = 320;
+    const mainRadius = 340;
 
     // 重新分配节点位置
     const agentNodes = nodes.filter(n => !['system', 'network', 'main'].includes(n.id));
@@ -840,8 +837,7 @@ app.get('/api/topology', async (req, res) => {
 
     const nodePositions = {};
     nodePositions['main'] = { x: 120, y: 160 };
-    nodePositions['system'] = { x: 860, y: 100 };
-    nodePositions['network'] = { x: 860, y: 200 };
+    // system 和 network 节点已移除
 
     agentNodes.forEach((node, idx) => {
       const angle = startAngle + idx * angleStep;
