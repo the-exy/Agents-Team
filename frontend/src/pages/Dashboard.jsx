@@ -7,6 +7,8 @@ function Dashboard() {
   const [agents, setAgents] = useState([])
   const [rankings, setRankings] = useState({ tokenRanking: [], activityRanking: [] })
   const [loading, setLoading] = useState(true)
+  const [agentAlerts, setAgentAlerts] = useState([])
+  const [prevAgents, setPrevAgents] = useState([])
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -27,6 +29,31 @@ function Dashboard() {
       if (rankingsRes.data) {
         setRankings(rankingsRes.data)
       }
+
+      // 检测 Agent 失联告警（online→offline）
+      const prevMap = new Map(prevAgents.map(a => [a.id, a]))
+      const newAlerts = agentAlerts ? [...agentAlerts] : []
+      for (const agent of agentsRes.data) {
+        const prev = prevMap.get(agent.id)
+        const hb = getHeartbeatStatus(agent.lastActive)
+        const prevHb = prev ? getHeartbeatStatus(prev.lastActive) : null
+        // 从非 offline 变成 offline，且不在告警列表中
+        if (prev && prevHb && prevHb.status !== 'offline' && hb.status === 'offline') {
+          const alreadyAlerted = newAlerts.some(a => a.agentId === agent.id)
+          if (!alreadyAlerted) {
+            newAlerts.push({
+              agentId: agent.id,
+              agentName: agent.name,
+              agentEmoji: agent.emoji,
+              offlineTime: new Date().toLocaleTimeString('zh-CN')
+            })
+          }
+        }
+      }
+      // 最多保留 5 条
+      if (newAlerts.length > 5) newAlerts.splice(0, newAlerts.length - 5)
+      if (newAlerts.length > 0 || agentAlerts.length > 0) setAgentAlerts(newAlerts)
+      setPrevAgents(agentsRes.data)
     } catch (error) {
       console.error('加载数据失败:', error)
     }
@@ -69,6 +96,18 @@ function Dashboard() {
 
   return (
     <div>
+      {/* Agent 失联告警 */}
+      {agentAlerts.length > 0 && (
+        <div className="alert-banner">
+          <span className="alert-icon">🚨</span>
+          <span className="alert-text">
+            Agent 失联：
+            {agentAlerts.map(a => `${a.agentEmoji}${a.agentName}`).join('、')}
+          </span>
+          <button onClick={() => setAgentAlerts([])} className="alert-dismiss">×</button>
+        </div>
+      )}
+
       {/* 统计卡片 */}
       <div className="stats-grid">
         <div className="stat-card stat-card-primary">

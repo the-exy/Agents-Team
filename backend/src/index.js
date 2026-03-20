@@ -115,7 +115,7 @@ async function initDB() {
       connectionLimit: 10, queueLimit: 0
     });
 
-    // 建表
+    // 建表 - token_usage（Token 使用明细）
     await dbPool.query(`
       CREATE TABLE IF NOT EXISTS token_usage (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -125,9 +125,12 @@ async function initDB() {
         total_tokens BIGINT DEFAULT 0, channel VARCHAR(64), model VARCHAR(128),
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         INDEX idx_agent_id (agent_id), INDEX idx_created_at (created_at),
-        INDEX idx_agent_date (agent_id, created_at)
+        INDEX idx_agent_date (agent_id, created_at),
+        INDEX idx_model (model)
       )
     `);
+
+    // 建表 - agent_events（Agent 事件）
     await dbPool.query(`
       CREATE TABLE IF NOT EXISTS agent_events (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -138,6 +141,8 @@ async function initDB() {
         INDEX idx_created_at (created_at)
       )
     `);
+
+    // 建表 - daily_token_summary（每日 Token 汇总）
     await dbPool.query(`
       CREATE TABLE IF NOT EXISTS daily_token_summary (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -151,7 +156,42 @@ async function initDB() {
       )
     `);
 
-    console.log('[DB] MySQL 连接成功，表已初始化');
+    // 建表 - model_updates（模型切换记录）【新增】
+    await dbPool.query(`
+      CREATE TABLE IF NOT EXISTS model_updates (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        agent_id VARCHAR(64) NOT NULL,
+        old_model VARCHAR(128) DEFAULT NULL,
+        new_model VARCHAR(128) NOT NULL,
+        switch_reason VARCHAR(256) DEFAULT NULL,
+        triggered_by VARCHAR(128) DEFAULT NULL,
+        session_key VARCHAR(256) DEFAULT NULL,
+        switch_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_agent_id (agent_id),
+        INDEX idx_new_model (new_model),
+        INDEX idx_switch_time (switch_time)
+      )
+    `);
+
+    // 建表 - model_daily_stats（模型每日调用统计）【新增】
+    await dbPool.query(`
+      CREATE TABLE IF NOT EXISTS model_daily_stats (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        agent_id VARCHAR(64) NOT NULL,
+        model VARCHAR(128) NOT NULL,
+        record_date DATE NOT NULL,
+        total_calls BIGINT DEFAULT 0,
+        total_input_tokens BIGINT DEFAULT 0,
+        total_output_tokens BIGINT DEFAULT 0,
+        total_tokens BIGINT DEFAULT 0,
+        unique_sessions INT DEFAULT 0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        UNIQUE KEY uk_agent_model_date (agent_id, model, record_date)
+      )
+    `);
+
+    console.log('[DB] MySQL 连接成功，表已初始化（含 model_updates / model_daily_stats）');
     return true;
   } catch (e) {
     console.error('[DB] MySQL 连接/初始化失败:', e.message);
@@ -285,65 +325,15 @@ function getUptime() {
 
 // ==================== 数据库初始化 ====================
 
-async function initDatabase() {
-  if (!dbPool) {
-    dbPool = mysql.createPool(dbConfig);
-  }
-  try {
-    // 先创建数据库（不指定 database 连接）
-    const tempPool = mysql.createPool({ host: dbConfig.host, port: dbConfig.port, user: dbConfig.user, password: dbConfig.password, waitForConnections: true, connectionLimit: 2 });
-    await tempPool.query(`CREATE DATABASE IF NOT EXISTS ${dbConfig.database}`);
-    await tempPool.end();
-
-    // 使用正式 pool 建表
-    await dbPool.query(`
-      CREATE TABLE IF NOT EXISTS token_usage (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        agent_id VARCHAR(64) NOT NULL,
-        agent_name VARCHAR(128) NOT NULL,
-        session_key VARCHAR(256),
-        parent_session VARCHAR(256),
-        input_tokens BIGINT DEFAULT 0,
-        output_tokens BIGINT DEFAULT 0,
-        total_tokens BIGINT DEFAULT 0,
-        channel VARCHAR(64),
-        model VARCHAR(128),
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        INDEX idx_agent_id (agent_id),
-        INDEX idx_created_at (created_at),
-        INDEX idx_agent_date (agent_id, created_at)
-      )
-    `);
-
-    await dbPool.query(`
-      CREATE TABLE IF NOT EXISTS agent_events (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        agent_id VARCHAR(64) NOT NULL,
-        event_type VARCHAR(64) NOT NULL,
-        session_key VARCHAR(256),
-        parent_session VARCHAR(256),
-        event_data JSON,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        INDEX idx_agent_id (agent_id),
-        INDEX idx_event_type (event_type),
-        INDEX idx_created_at (created_at)
-      )
-    `);
-
-    console.log('[DB] 数据库初始化完成');
-  } catch (err) {
-    console.warn('[DB] 数据库初始化失败:', err.message);
-    dbPool = null;
-  }
-}
-
 // 记录 Token 使用量（upsert 逻辑，同 agent_id+session_key+同分钟则更新）
+// 同时检测模型切换并更新 model_updates 和 model_daily_stats
 async function recordTokenUsage() {
   if (!dbPool) return;
   try {
     const allSessions = readAllSessionsData();
     const now = Date.now();
     const minuteKey = Math.floor(now / 60000); // 分钟级别 key
+    const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
 
     for (const [agentId, sessionsData] of Object.entries(allSessions)) {
       const config = agentConfigs[agentId] || { id: agentId, name: `${agentId} Agent`, emoji: '🤖' };
@@ -381,12 +371,41 @@ async function recordTokenUsage() {
             VALUES (?, 'session_start', ?, ?, ?, NOW())
           `, [agentId, sessionKey, parentSession, JSON.stringify({ spawnDepth: data.spawnDepth || 0, channel, model })]);
         }
+
+        // 【新增】检测模型切换：与上次记录对比，发现模型变化则写入 model_updates
+        if (model) {
+          const prevEntry = lastKnownModel[agentId];
+          if (!prevEntry || prevEntry !== model) {
+            // 模型发生了变化
+            await dbPool.query(`
+              INSERT INTO model_updates (agent_id, old_model, new_model, session_key, switch_time)
+              VALUES (?, ?, ?, ?, NOW())
+            `, [agentId, prevEntry || null, model, sessionKey]);
+            lastKnownModel[agentId] = model;
+          }
+        }
+
+        // 【新增】更新 model_daily_stats（每日聚合）
+        if (model) {
+          await dbPool.query(`
+            INSERT INTO model_daily_stats (agent_id, model, record_date, total_calls, total_input_tokens, total_output_tokens, total_tokens, unique_sessions)
+            VALUES (?, ?, ?, 1, ?, ?, ?, 1)
+            ON DUPLICATE KEY UPDATE
+              total_calls = total_calls + 1,
+              total_input_tokens = total_input_tokens + VALUES(total_input_tokens),
+              total_output_tokens = total_output_tokens + VALUES(total_output_tokens),
+              total_tokens = total_tokens + VALUES(total_tokens)
+          `, [agentId, model, today, inputTokens, outputTokens, totalTokens]);
+        }
       }
     }
   } catch (err) {
     console.warn('[DB] 记录 token 使用量失败:', err.message);
   }
 }
+
+// 跟踪每个 Agent 最近一次记录的模型（用于检测模型切换）
+const lastKnownModel = {};
 
 // 自动记录 token（带锁，5分钟内相同数据不重复记录）
 function autoRecordTokenUsage() {
@@ -1052,28 +1071,117 @@ app.get('/api/token-stats', async (req, res) => {
   try {
     const { start_date, end_date, agent_id } = req.query;
 
-    let query = `SELECT agent_id, record_date, total_input_tokens, total_output_tokens,
-                 total_tokens, session_count FROM daily_token_summary WHERE 1=1`;
+    let dailyQuery = `SELECT agent_id, agent_name, record_date, total_input_tokens,
+                      total_output_tokens, total_tokens, session_count
+                      FROM daily_token_summary WHERE 1=1`;
     const params = [];
 
-    if (start_date) { query += ' AND record_date >= ?'; params.push(start_date); }
-    if (end_date) { query += ' AND record_date <= ?'; params.push(end_date); }
-    if (agent_id) { query += ' AND agent_id = ?'; params.push(agent_id); }
+    if (start_date) { dailyQuery += ' AND record_date >= ?'; params.push(start_date); }
+    if (end_date) { dailyQuery += ' AND record_date <= ?'; params.push(end_date); }
+    if (agent_id) { dailyQuery += ' AND agent_id = ?'; params.push(agent_id); }
 
-    query += ' ORDER BY record_date DESC, agent_id ASC';
+    dailyQuery += ' ORDER BY record_date DESC, agent_id ASC';
 
-    const [rows] = await dbPool.execute(query, params);
+    const [rows] = await dbPool.execute(dailyQuery, params);
 
-    // 同时返回汇总
-    const [summary] = await dbPool.execute(
-      `SELECT agent_id, SUM(total_tokens) as total, SUM(input_tokens) as input, SUM(output_tokens) as output, COUNT(DISTINCT session_key) as sessions FROM token_usage GROUP BY agent_id`
+    // 返回全局汇总（扁平格式，供 TokenStats 概览卡片使用）
+    const [globalSummary] = await dbPool.execute(
+      `SELECT
+         COALESCE(SUM(total_input_tokens), 0)  AS total_input_tokens,
+         COALESCE(SUM(total_output_tokens), 0) AS total_output_tokens,
+         COALESCE(SUM(total_tokens), 0)        AS total_tokens,
+         COALESCE(SUM(session_count), 0)       AS total_sessions
+       FROM daily_token_summary
+       ${agent_id ? 'WHERE agent_id = ?' : ''}
+       ${agent_id ? [] : []}`,
+      agent_id ? [agent_id] : []
     );
 
     res.json({
-      daily: rows,
-      summary: summary,
+      daily: rows.map(r => ({
+        date: r.record_date,
+        agent_id: r.agent_id,
+        agent_name: r.agent_name,
+        input_tokens: r.total_input_tokens,
+        output_tokens: r.total_output_tokens,
+        total_tokens: r.total_tokens,
+        session_count: r.session_count
+      })),
+      summary: Array.isArray(globalSummary) && globalSummary.length > 0 ? globalSummary[0] : {
+        total_input_tokens: 0, total_output_tokens: 0, total_tokens: 0, total_sessions: 0
+      },
       query: { start_date, end_date, agent_id }
     });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /api/token-usage/daily-summary - 每日 Token 趋势（供 TokenHistory 图表使用）
+// Frontend: tokenAPI.queryDailySummary({ startDate, endDate, agentId })
+app.get('/api/token-usage/daily-summary', async (req, res) => {
+  if (!dbPool) return res.status(503).json({ error: '数据库未连接' });
+  try {
+    const { startDate, endDate, agentId } = req.query;
+
+    let query = `SELECT record_date AS date, agent_id,
+                        SUM(input_tokens)  AS inputTokens,
+                        SUM(output_tokens) AS outputTokens,
+                        SUM(total_tokens)  AS totalTokens
+                 FROM token_usage WHERE 1=1`;
+    const params = [];
+
+    if (startDate) { query += ' AND DATE(created_at) >= ?'; params.push(startDate); }
+    if (endDate)   { query += ' AND DATE(created_at) <= ?'; params.push(endDate); }
+    if (agentId && agentId !== 'all') { query += ' AND agent_id = ?'; params.push(agentId); }
+
+    query += ' GROUP BY record_date, agent_id ORDER BY record_date ASC';
+
+    const [rows] = await dbPool.execute(query, params);
+
+    res.json(rows.map(r => ({
+      date: r.date,
+      agentId: r.agent_id,
+      inputTokens: Number(r.inputTokens) || 0,
+      outputTokens: Number(r.outputTokens) || 0,
+      totalTokens: Number(r.totalTokens) || 0
+    })));
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /api/token-usage/query - Token 使用明细（供 TokenHistory 明细表格使用）
+// Frontend: tokenAPI.queryDetails({ startDate, endDate, agentId, limit })
+app.get('/api/token-usage/query', async (req, res) => {
+  if (!dbPool) return res.status(503).json({ error: '数据库未连接' });
+  try {
+    const { startDate, endDate, agentId, limit = 100 } = req.query;
+
+    let query = `SELECT session_key, channel, model, created_at AS createdAt,
+                        input_tokens AS inputTokens, output_tokens AS outputTokens,
+                        total_tokens AS totalTokens, agent_id
+                 FROM token_usage WHERE 1=1`;
+    const params = [];
+
+    if (startDate) { query += ' AND DATE(created_at) >= ?'; params.push(startDate); }
+    if (endDate)   { query += ' AND DATE(created_at) <= ?'; params.push(endDate); }
+    if (agentId && agentId !== 'all') { query += ' AND agent_id = ?'; params.push(agentId); }
+
+    query += ' ORDER BY created_at DESC LIMIT ?';
+    params.push(parseInt(limit));
+
+    const [rows] = await dbPool.execute(query, params);
+
+    res.json(rows.map(r => ({
+      sessionKey: r.session_key,
+      channel: r.channel,
+      model: r.model,
+      createdAt: r.createdAt,
+      inputTokens: Number(r.inputTokens) || 0,
+      outputTokens: Number(r.outputTokens) || 0,
+      agentId: r.agent_id
+    })));
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -1244,9 +1352,340 @@ app.get('/api/agent-events', async (req, res) => {
   }
 });
 
+// GET /api/models - 获取模型使用统计（从 sessions.json 读取）
+app.get('/api/models', (req, res) => {
+  try {
+    const allSessions = readAllSessionsData();
+    const modelStats = {};      // model -> { totalTokens, inputTokens, outputTokens, sessionCount, agents }
+    const agentModels = {};    // agentId -> { currentModel, tokens, sessions }
+    const modelHistory = [];   // 历史模型切换记录
+
+    for (const [agentId, sessionsData] of Object.entries(allSessions)) {
+      const config = agentConfigs[agentId] || { id: agentId, name: `${agentId} Agent`, emoji: '🤖' };
+      agentModels[agentId] = {
+        agentId,
+        agentName: config.name,
+        agentEmoji: config.emoji,
+        currentModel: null,
+        totalTokens: 0,
+        inputTokens: 0,
+        outputTokens: 0,
+        sessionCount: 0,
+        sessions: []
+      };
+
+      for (const [sessionKey, data] of Object.entries(sessionsData)) {
+        const model = data.model || 'unknown';
+        const inputTokens = data.inputTokens || 0;
+        const outputTokens = data.outputTokens || 0;
+        const totalTokens = data.totalTokens || (inputTokens + outputTokens);
+        const updatedAt = data.updatedAt ? new Date(data.updatedAt) : null;
+
+        // Agent 级别统计
+        agentModels[agentId].sessionCount++;
+        agentModels[agentId].totalTokens += totalTokens;
+        agentModels[agentId].inputTokens += inputTokens;
+        agentModels[agentId].outputTokens += outputTokens;
+        // 最新的 model 作为当前 model
+        if (updatedAt && (!agentModels[agentId].currentModel || agentModels[agentId].currentModel === 'unknown')) {
+          agentModels[agentId].currentModel = model;
+        }
+        agentModels[agentId].sessions.push({
+          sessionKey,
+          model,
+          totalTokens,
+          inputTokens,
+          outputTokens,
+          updatedAt: updatedAt ? updatedAt.toISOString() : null,
+          channel: data.lastChannel || data.channel || null
+        });
+
+        // 全局 model 统计
+        if (!modelStats[model]) {
+          modelStats[model] = { totalTokens: 0, inputTokens: 0, outputTokens: 0, sessionCount: 0, agents: new Set() };
+        }
+        modelStats[model].totalTokens += totalTokens;
+        modelStats[model].inputTokens += inputTokens;
+        modelStats[model].outputTokens += outputTokens;
+        modelStats[model].sessionCount++;
+        modelStats[model].agents.add(agentId);
+
+        // 历史记录（最近 50 条）
+        if (updatedAt) {
+          modelHistory.push({
+            agentId,
+            agentName: config.name,
+            agentEmoji: config.emoji,
+            sessionKey,
+            model,
+            totalTokens,
+            updatedAt: updatedAt.toISOString(),
+            channel: data.lastChannel || data.channel || null
+          });
+        }
+      }
+    }
+
+    // 汇总 model 列表
+    const modelList = Object.entries(modelStats).map(([model, stats]) => ({
+      model,
+      totalTokens: stats.totalTokens,
+      inputTokens: stats.inputTokens,
+      outputTokens: stats.outputTokens,
+      sessionCount: stats.sessionCount,
+      agentCount: stats.agents.size,
+      agents: Array.from(stats.agents)
+    })).sort((a, b) => b.totalTokens - a.totalTokens);
+
+    // 按 tokens 排序 agent models
+    const agentModelList = Object.values(agentModels)
+      .map(a => ({ ...a, sessions: a.sessions.sort((s1, s2) => (s2.updatedAt || 0) - (s1.updatedAt || 0)) }))
+      .sort((a, b) => b.totalTokens - a.totalTokens);
+
+    // 历史记录取最近 50 条
+    modelHistory.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+    const recentHistory = modelHistory.slice(0, 50);
+
+    res.json({
+      models: modelList,
+      agents: agentModelList,
+      history: recentHistory,
+      totalModels: modelList.length
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // 初始化数据库
 initDB();
 
 app.listen(PORT, () => {
   console.log(`Agent监控服务运行在 http://localhost:${PORT}`);
+});
+
+// ==================== 模型更新仪表盘 API ====================
+
+// GET /api/model-updates - 获取模型切换记录
+// Query: agentId, limit, startTime, endTime
+app.get('/api/model-updates', async (req, res) => {
+  if (!dbPool) return res.status(503).json({ error: '数据库未连接' });
+  try {
+    const { agentId, limit = 50, startTime, endTime } = req.query;
+    let query = 'SELECT * FROM model_updates WHERE 1=1';
+    const params = [];
+    if (agentId) { query += ' AND agent_id = ?'; params.push(agentId); }
+    if (startTime) { query += ' AND switch_time >= ?'; params.push(startTime); }
+    if (endTime)   { query += ' AND switch_time <= ?'; params.push(endTime); }
+    const safeLimit = parseInt(limit, 10);
+    query += ` ORDER BY switch_time DESC LIMIT ${safeLimit}`;
+    const [rows] = await dbPool.execute(query, params);
+    res.json({ records: rows, count: rows.length });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /api/model-updates/stats - 模型调用量统计（按模型分组）
+// Query: agentId, startDate, endDate
+app.get('/api/model-updates/stats', async (req, res) => {
+  if (!dbPool) return res.status(503).json({ error: '数据库未连接' });
+  try {
+    const { agentId, startDate, endDate } = req.query;
+
+    // 优先查 model_daily_stats 表（聚合好的数据）
+    let query = `SELECT agent_id, model, record_date,
+                        total_calls, total_input_tokens, total_output_tokens,
+                        total_tokens, unique_sessions
+                 FROM model_daily_stats WHERE 1=1`;
+    const params = [];
+    if (agentId)    { query += ' AND agent_id = ?'; params.push(agentId); }
+    if (startDate)  { query += ' AND record_date >= ?'; params.push(startDate); }
+    if (endDate)    { query += ' AND record_date <= ?'; params.push(endDate); }
+    query += ' ORDER BY record_date DESC, total_tokens DESC';
+
+    const [rows] = await dbPool.execute(query, params);
+
+    // 如果 model_daily_stats 为空（表刚创建），从 token_usage 聚合
+    if (rows.length === 0) {
+      const fallback = `SELECT agent_id, model, DATE(created_at) AS record_date,
+                              COUNT(*)              AS total_calls,
+                              SUM(input_tokens)    AS total_input_tokens,
+                              SUM(output_tokens)   AS total_output_tokens,
+                              SUM(total_tokens)    AS total_tokens,
+                              COUNT(DISTINCT session_key) AS unique_sessions
+                       FROM token_usage
+                       WHERE model IS NOT NULL AND model != ''`;
+      const fbParams = [];
+      if (agentId)    { fbParams.push(agentId); }
+      const fbConds = [];
+      if (agentId)    fbConds.push('agent_id = ?');
+      if (startDate)  { fbConds.push('DATE(created_at) >= ?'); fbParams.push(startDate); }
+      if (endDate)    { fbConds.push('DATE(created_at) <= ?'); fbParams.push(endDate); }
+      const fbWhere = fbConds.length ? ' AND ' + fbConds.join(' AND ') : '';
+      const [fbRows] = await dbPool.execute(fallback + fbWhere + ' GROUP BY agent_id, model, DATE(created_at) ORDER BY total_tokens DESC', fbParams);
+      return res.json({ stats: fbRows, count: fbRows.length, source: 'token_usage' });
+    }
+
+    res.json({ stats: rows, count: rows.length, source: 'model_daily_stats' });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /api/model-updates/current - 当前各 Agent 使用的模型版本
+// 从 token_usage 中取每个 agent_id 最近一次有 model 记录的
+app.get('/api/model-updates/current', async (req, res) => {
+  if (!dbPool) return res.status(503).json({ error: '数据库未连接' });
+  try {
+    const query = `SELECT t.agent_id, t.model, t.created_at AS last_seen,
+                          t.input_tokens, t.output_tokens, t.total_tokens
+                   FROM token_usage t
+                   INNER JOIN (
+                     SELECT agent_id, MAX(created_at) AS max_created
+                     FROM token_usage
+                     WHERE model IS NOT NULL AND model != ''
+                     GROUP BY agent_id
+                   ) latest ON t.agent_id = latest.agent_id AND t.created_at = latest.max_created
+                   ORDER BY t.agent_id`;
+    const [rows] = await dbPool.execute(query);
+    res.json({
+      models: rows.map(r => ({
+        agentId: r.agent_id,
+        model: r.model,
+        lastSeen: r.last_seen,
+        inputTokens: Number(r.input_tokens) || 0,
+        outputTokens: Number(r.output_tokens) || 0,
+        totalTokens: Number(r.total_tokens) || 0
+      }))
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /api/model-updates - 记录一次模型切换
+app.post('/api/model-updates', async (req, res) => {
+  if (!dbPool) return res.status(503).json({ error: '数据库未连接' });
+  try {
+    const { agent_id, old_model, new_model, switch_reason, triggered_by, session_key } = req.body;
+    if (!agent_id || !new_model) {
+      return res.status(400).json({ error: 'agent_id 和 new_model 是必填字段' });
+    }
+    const [result] = await dbPool.execute(
+      `INSERT INTO model_updates (agent_id, old_model, new_model, switch_reason, triggered_by, session_key, switch_time)
+       VALUES (?, ?, ?, ?, ?, ?, NOW())`,
+      [agent_id, old_model || null, new_model, switch_reason || null, triggered_by || null, session_key || null]
+    );
+    res.json({ id: result.insertId, message: '模型切换记录已保存' });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ==================== 网络拓扑 API（增强：从数据库读取连接状态） ====================
+
+// GET /api/topology/nodes - 获取拓扑节点及实时连接状态（从数据库）
+app.get('/api/topology/nodes', async (req, res) => {
+  if (!dbPool) return res.status(503).json({ error: '数据库未连接' });
+  try {
+    // 从 agent_events 表读取最近活跃状态
+    const [events] = await dbPool.execute(`
+      SELECT agent_id, event_type, MAX(created_at) AS last_seen
+      FROM agent_events
+      GROUP BY agent_id, event_type
+    `);
+
+    // 从 token_usage 读取每个 agent 最新活跃时间
+    const [tokens] = await dbPool.execute(`
+      SELECT agent_id, MAX(created_at) AS last_active, SUM(total_tokens) AS total_tokens
+      FROM token_usage
+      GROUP BY agent_id
+    `);
+
+    const tokenMap = {};
+    for (const t of tokens) {
+      tokenMap[t.agent_id] = { lastActive: t.last_active, totalTokens: Number(t.total_tokens) || 0 };
+    }
+
+    const eventMap = {};
+    for (const e of events) {
+      if (!eventMap[e.agent_id]) eventMap[e.agent_id] = {};
+      eventMap[e.agent_id][e.event_type] = e.last_seen;
+    }
+
+    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+
+    const nodes = Object.entries(agentConfigs).map(([id, config]) => {
+      const lastActive = tokenMap[id]?.lastActive ? new Date(tokenMap[id].lastActive) : null;
+      let status = 'offline';
+      if (lastActive) {
+        status = lastActive > fiveMinutesAgo ? 'online' : 'idle';
+      }
+      return {
+        id,
+        name: config.name,
+        emoji: config.emoji,
+        role: config.role,
+        status,
+        totalTokens: tokenMap[id]?.totalTokens || 0,
+        lastSeen: lastActive ? lastActive.toISOString() : null,
+        lastSeenAgo: formatTimeAgo(lastActive ? lastActive.getTime() : null)
+      };
+    });
+
+    res.json({ nodes });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /api/topology/connections - 获取 Agent 间连接关系（从数据库）
+app.get('/api/topology/connections', async (req, res) => {
+  if (!dbPool) return res.status(503).json({ error: '数据库未连接' });
+  try {
+    const { agentId } = req.query;
+
+    // 从 token_usage 中根据 parent_session 推断父子关系
+    let query = `SELECT DISTINCT agent_id, parent_session FROM token_usage
+                 WHERE parent_session IS NOT NULL AND parent_session != ''`;
+    const params = [];
+    if (agentId) { query += ' AND agent_id = ?'; params.push(agentId); }
+
+    const [rows] = await dbPool.execute(query, params);
+
+    // 构建连接列表
+    const connections = [];
+    const seen = new Set();
+
+    for (const row of rows) {
+      const key = `${row.parent_session}|${row.agent_id}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        connections.push({
+          source: row.parent_session.split(':')[1] || 'main', // 提取 parent session 中的 agentId
+          target: row.agent_id,
+          type: 'session_spawn',
+          parentSession: row.parent_session,
+          direction: 'parent-to-child'
+        });
+      }
+    }
+
+    // 补充静态的协调关系（main -> 其他所有 agent）
+    for (const [id, config] of Object.entries(agentConfigs)) {
+      if (id !== 'main') {
+        connections.push({
+          source: 'main',
+          target: id,
+          type: 'coordination',
+          direction: 'parent-to-child'
+        });
+      }
+    }
+
+    res.json({ connections, count: connections.length });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });

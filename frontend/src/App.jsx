@@ -9,6 +9,7 @@ import Memorials from './pages/Memorials'
 import Logs from './pages/Logs'
 import TokenHistory from './pages/TokenHistory'
 import Subagents from './pages/Subagents'
+import ModelDashboard from './pages/ModelDashboard'
 
 function App() {
   const location = useLocation()
@@ -46,6 +47,9 @@ function App() {
             <Link to="/memorials" className={`nav-link ${isActive('/memorials') ? 'active' : ''}`}>
               奏折阁
             </Link>
+            <Link to="/models" className={`nav-link ${isActive('/models') ? 'active' : ''}`}>
+              模型仪表盘
+            </Link>
             <Link to="/logs" className={`nav-link ${isActive('/logs') ? 'active' : ''}`}>
               活动日志
             </Link>
@@ -63,6 +67,7 @@ function App() {
           <Route path="/token-history" element={<TokenHistory />} />
           <Route path="/subagents" element={<Subagents />} />
           <Route path="/memorials" element={<Memorials />} />
+          <Route path="/models" element={<ModelDashboard />} />
           <Route path="/logs" element={<Logs />} />
         </Routes>
       </main>

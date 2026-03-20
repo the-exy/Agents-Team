@@ -95,16 +95,19 @@ function AgentDetail() {
     return <div className="empty loading-pulse">加载中...</div>
   }
 
-  if (!agent) {
+  if (!agent || agent === null) {
     return (
       <div className="empty">
-        <p>未找到该 Agent</p>
+        <p>未找到该 Agent，API 返回了空数据。</p>
         <button className="btn btn-primary" onClick={() => navigate('/')}>
           返回仪表盘
         </button>
       </div>
     )
   }
+
+  // Agent 存在但无会话数据——正常状态（Agent 从未建立会话）
+  const hasNoSessions = !agent.sessions || agent.sessions.length === 0;
 
   const agentTasks = agent.tasks || []
 

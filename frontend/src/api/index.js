@@ -70,4 +70,14 @@ export const eventsAPI = {
   getAgentEvents: (params) => api.get('/agent-events', { params })
 };
 
+export const modelAPI = {
+  getModels: () => api.get('/models')
+};
+
+export const modelDashboardAPI = {
+  getModelStats: (params) => api.get('/model-updates/stats', { params }),
+  getCurrentModels: () => api.get('/model-updates/current'),
+  getModelHistory: (params) => api.get('/model-updates', { params })
+};
+
 export default api;
