@@ -1,7 +1,7 @@
 # Agent Network Monitor - 项目文档
 
-> 当前版本：3.0.0  
-> 最后更新：2026-03-19
+> 当前版本：4.0.0  
+> 最后更新：2026-03-20
 
 ---
 
@@ -43,6 +43,8 @@
 | `/agents/:id` | Agent Detail | Agent 详情页（Tab：概览/会话/技能/文件/任务） |
 | `/tasks` | Tasks | 任务看板 |
 | `/logs` | Logs | 活动日志 |
+| `/token-stats` | TokenStats | Token 使用统计（支持日期查询） |
+| `/concepts` | Concepts | Multi-Agent vs SubAgent 概念说明 |
 
 ---
 
@@ -475,6 +477,56 @@ else → idle
 
 ---
 
+### 4.8 Token 统计相关
+
+#### GET /api/token-stats
+
+Token 使用统计（需 MySQL 持久化支持）。
+
+**查询参数：**
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| start_date | string | 否 | 起始日期（YYYY-MM-DD），默认 30 天前 |
+| end_date | string | 否 | 结束日期（YYYY-MM-DD），默认今天 |
+| agent_id | string | 否 | Agent ID 过滤（如 main、backend） |
+
+**响应字段说明：**
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| daily | array | 每日 Token 明细列表 |
+| daily[].record_date | string | 日期（YYYY-MM-DD） |
+| daily[].agent_id | string | Agent ID |
+| daily[].total_tokens | number | 当日 Token 总数 |
+| summary | array | 汇总数据列表 |
+| summary[].agent_id | string | Agent ID |
+| summary[].total_tokens | number | 累计 Token 总数 |
+| summary[].session_count | number | 会话数量 |
+| query | object | 查询参数快照 |
+| query.start_date | string | 实际起始日期 |
+| query.end_date | string | 实际结束日期 |
+| query.agent_id | string | 实际过滤条件 |
+
+---
+
+#### GET /api/token-daily
+
+每日 Token 趋势（最近 30 天）。
+
+**响应字段说明：**
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| data | array | 每日趋势数据列表 |
+| data[].record_date | string | 日期（YYYY-MM-DD） |
+| data[].agent_id | string | Agent ID |
+| data[].total_tokens | number | 当日 Token 总数 |
+| data[].session_count | number | 当日会话数量 |
+| data[].avg_tokens | number | 当日平均每会话 Token 数 |
+
+---
+
 ## 5. 页面功能说明
 
 ### 5.1 仪表盘（Dashboard）
@@ -705,36 +757,55 @@ frontend/src/
 ### 6.4 数据流
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                        前端 (React)                             │
-│  ┌─────────┐   ┌──────────┐   ┌────────────┐   ┌─────────┐     │
-│  │Dashboard│   │Topology  │   │AgentDetail │   │ Tasks   │     │
-│  └────┬────┘   └────┬─────┘   └──────┬─────┘   └────┬────┘     │
-│       │              │                │               │          │
-│       └──────────────┴───────┬────────┴───────────────┘          │
-│                              │                                    │
-│                        ┌─────┴─────┐                              │
-│                        │   Axios    │                              │
-│                        └─────┬─────┘                              │
-└──────────────────────────────┼───────────────────────────────────┘
-                               │ HTTP 请求
-                               ▼
-┌──────────────────────────────┼───────────────────────────────────┐
-│                     后端 (Express)                               │
-│  ┌──────────────────────────────────────────────────────────┐   │
-│  │                    多 Agent 扫描引擎                      │   │
-│  │  scan ~/.openclaw/workspace/ 获取所有 Agent 目录          │   │
-│  │  ├── 读取 sessions.json → 会话数据 + 状态计算             │   │
-│  │  ├── 读取 SOUL.md / IDENTITY.md → Agent 元信息            │   │
-│  │  ├── 扫描 skills/ 目录 → 技能列表                        │   │
-│  │  └── 递归扫描文件 → 文件列表                             │   │
-│  └──────────────────────────────────────────────────────────┘   │
-│                                                                    │
-│  ┌─────────────┬─────────────┬─────────────┬───────────────┐     │
-│  │     os     │   process   │tasklist命令 │  飞书任务 API │     │
-│  │    模块    │    对象     │ (Windows)   │  (可选集成)   │     │
-│  └─────────────┴─────────────┴─────────────┴───────────────┘     │
-└────────────────────────────────────────────────────────────────────┘
+数据流
+─────────────────────────────
+  前端(React) 
+    ↓ HTTP
+  后端(Express) 
+    ├──→ sessions.json 读取（文件系统）
+    └──→ MySQL 写入（token_usage/daily_token_summary）
+
+完整数据流图
+─────────────────────────────────────────────────────────────────────
+                         前端 (React)
+  ┌──────────┐  ┌──────────┐  ┌────────────┐  ┌──────────┐
+  │Dashboard │  │Topology  │  │AgentDetail  │  │ Tasks    │
+  └────┬─────┘  └────┬─────┘  └──────┬─────┘  └────┬─────┘
+       └─────────────┴────────┬────────┴────────────┘
+                              │
+                        ┌─────┴─────┐
+                        │   Axios    │
+                        └─────┬─────┘
+──────────────────────────────┼─────────────────────────────────────
+                              │ HTTP 请求
+                              ▼
+                         后端 (Express)
+  ┌──────────────────────────────────────────────────────────────┐
+  │                    多 Agent 扫描引擎                          │
+  │  scan ~/.openclaw/workspace/ 获取所有 Agent 目录               │
+  │  ├── 读取 sessions.json → 会话数据 + 状态计算                 │
+  │  ├── 读取 SOUL.md / IDENTITY.md → Agent 元信息                │
+  │  ├── 扫描 skills/ 目录 → 技能列表                            │
+  │  └── 递归扫描文件 → 文件列表                                 │
+  │                                                               │
+  │  Token 持久化引擎（MySQL）                                    │
+  │  ├── 增量同步 sessions 数据 → token_usage                    │
+  │  ├── 每日汇总 → daily_token_summary                          │
+  │  └── 降级模式：MySQL 故障不影响 API 返回                      │
+  └──────────────────────────────────────────────────────────────┘
+                              │
+          ┌───────────────────┴───────────────────┐
+          ▼                                       ▼
+  sessions.json（文件系统）              MySQL（持久化存储）
+  ~/.openclaw/workspace/<agent>/       127.0.0.1:3306
+  └── sessions.json                      ├── token_usage
+                                          ├── session_events
+                                          └── daily_token_summary
+─────────────────────────────────────────────────────────────────────
+  ┌─────────────┬─────────────┬─────────────┬───────────────┐
+  │     os     │   process   │tasklist命令 │  飞书任务 API │
+  │    模块    │    对象     │ (Windows)   │  (可选集成)   │
+  └─────────────┴─────────────┴─────────────┴───────────────┘
 ```
 
 ---
@@ -768,17 +839,95 @@ sessions_send({
 
 ---
 
-## 8. 版本历史
+## 8. 架构说明：Multi-Agent vs SubAgent
+
+### 8.1 Multi-Agent（多 Agent 模式）
+
+**定义：** 多个独立 Agent 进程同时运行，各自负责不同领域。
+
+**特点：**
+- 每个 Agent 是独立进程（`openclaw.json` 中的 `agents.list`）
+- 各自有独立的 sessions.json、工作空间、飞书账号
+- 通过飞书消息或 `sessions_send` 互相通信
+- 主 Agent（main）负责协调其他 Agent
+
+**现有 Agent：**
+
+| ID | 名称 | 角色 | 端口 |
+|----|------|------|------|
+| main | 主代理 | 协调者 | 18789 |
+| backend | 后端开发 | 后端开发任务 | - |
+| frontend | 前端开发 | 前端开发任务 | - |
+| pm | 产品经理 | 文档和项目管理 | - |
+| db | 数据库 | 数据库管理 | - |
+| test | 测试 | 测试工程师 | - |
+| ops | 运维 | 运维管理 | - |
+
+### 8.2 SubAgent（子 Agent 模式）
+
+**定义：** 通过 `sessions_spawn()` 在主 Agent 内派生的临时会话。
+
+**特点：**
+- 不是独立进程，是主会话的子任务
+- 用于并行处理复杂任务
+- 任务完成后自动结束
+- 结果汇总到主会话返回给用户
+
+**调用方式：** `sessions_spawn()` / `subagents spawn`
+
+**适用场景：** 需要多个专业领域同时工作的复杂任务。
+
+### 8.3 agent-monitor 平台与两种模式的关系
+
+- **监控重点：** Multi-Agent 模式（独立 Agent 的实时状态）
+- **数据来源：** 读取 `~/.openclaw/agents/<agentId>/sessions/sessions.json`
+- **SubAgent：** 目前通过主 Agent 的会话记录间接反映
+
+---
+
+## 9. 数据持久化设计
+
+### 9.1 持久化方案
+
+- **数据库：** MySQL 5.7+（本地 `127.0.0.1:3306`）
+- **库名：** `agent_monitor`
+- **连接方式：** `mysql2/promise` 连接池
+
+### 9.2 数据表设计
+
+| 表名 | 说明 |
+|------|------|
+| `token_usage` | Token 使用明细（每条会话记录一行） |
+| `session_events` | 会话事件（开始/结束/消息） |
+| `daily_token_summary` | 每日汇总（方便查询） |
+
+### 9.3 数据写入策略
+
+- 每次 `GET /api/agents` 调用时，增量同步最新 sessions 数据到 MySQL
+- 采用 `ON DUPLICATE KEY UPDATE` 实现增量更新
+- MySQL 连接失败不影响 API 正常返回（降级模式）
+
+### 9.4 查询 API
+
+| 端点 | 说明 |
+|------|------|
+| `GET /api/token-stats` | 支持按日期范围、agent_id 查询明细和汇总 |
+| `GET /api/token-daily` | 最近 30 天每日趋势 |
+
+---
+
+## 10. 版本历史
 
 | 版本 | 日期 | 变更说明 |
 |------|------|----------|
 | 1.0.0 | 2026-03-19 | 初始版本，包含：<br>- Agent 状态监测<br>- 任务追踪<br>- 活动日志<br>- 网络拓扑可视化 |
 | 2.0.0 | 2026-03-19 | 重大更新：<br>- 后端改用真实 Node.js os 模块获取数据<br>- 新增 /api/metrics 综合指标端点<br>- 新增 /api/cpu CPU 详细信息<br>- 新增 /api/processes 进程列表<br>- 新增 /api/system 系统信息<br>- Agent 从 7 个改为 4 个系统监控模块 |
 | 3.0.0 | 2026-03-19 | 多 Agent 架构重大更新：<br>- 支持监控所有 OpenClaw Agent（main、backend、frontend、pm、db、test、ops）<br>- 后端动态扫描所有 Agent 目录，读取 sessions.json<br>- 新增 Agent 详情页（概览/会话/技能/文件/任务 Tab）<br>- Agent 卡 click → 跳转详情页<br>- 动态网络拓扑，展示所有 Agent 及连接关系<br>- 新增 API：/api/agents/:id/skills、/api/agents/:id/files、/api/agents/:id/tasks<br>- Agent 状态定义：active（活跃）/ idle（空闲）/ offline（离线）<br>- 动态统计：activeCount、idleCount、offlineCount、totalSessions<br>- 动态仪表盘：动画统计卡片<br>- 拓扑图动画：流动连接线、节点脉冲效果 |
+| 4.0.0 | 2026-03-20 | 全面升级：<br>- MySQL 持久化：Token 使用明细入库<br>- 新增 TokenStats 页面，支持日期范围查询<br>- 新增 Concepts 页面，澄清 Multi-Agent vs SubAgent 架构<br>- 修复 Topology 位置计算 Bug（const→let）<br>- Dashboard 新增快捷入口 |
 
 ---
 
-## 9. 项目结构
+## 11. 项目结构
 
 ```
 agent-monitor/
@@ -813,7 +962,7 @@ agent-monitor/
 
 ---
 
-## 10. 注意事项
+## 12. 注意事项
 
 1. **sessions.json 路径** - 后端扫描 `~/.openclaw/workspace/*/sessions.json`
 2. **状态计算** - 以 sessions.json 中最新会话记录的时间计算 active/idle/offline

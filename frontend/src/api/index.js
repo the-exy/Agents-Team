@@ -51,4 +51,23 @@ export const statsAPI = {
   getStats: () => api.get('/stats')
 };
 
+export const tokenStatsAPI = {
+  getTokenStats: (params) => api.get('/token-stats', { params })
+};
+
+export const tokenAPI = {
+  queryDailySummary: (params) => api.get('/token-usage/daily-summary', { params }),
+  queryDetails: (params) => api.get('/token-usage/query', { params }),
+  record: () => api.post('/token-usage/record')
+};
+
+export const subagentAPI = {
+  getSubagents: () => api.get('/subagents'),
+  getSubagentTree: () => api.get('/subagent-tree')
+};
+
+export const eventsAPI = {
+  getAgentEvents: (params) => api.get('/agent-events', { params })
+};
+
 export default api;

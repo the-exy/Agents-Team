@@ -63,15 +63,19 @@ function Topology() {
   const nodeWidth = 120
   const nodeHeight = 70
 
-  const getLinkPath = (link) => {
-    const sourceIdx = topology.nodes.findIndex(n => n.id === link.source)
-    const targetIdx = topology.nodes.findIndex(n => n.id === link.target)
-    if (sourceIdx === -1 || targetIdx === -1) return ''
+  const getNodePos = (node) => {
+    return (node.position && typeof node.position.x === 'number')
+      ? node.position
+      : getNodePosition(node.id, 0, topology.nodes.length)
+  }
 
-    const source = topology.nodes[sourceIdx]
-    const target = topology.nodes[targetIdx]
-    const sourcePos = getNodePosition(source.id, sourceIdx, topology.nodes.length)
-    const targetPos = getNodePosition(target.id, targetIdx, topology.nodes.length)
+  const getLinkPath = (link) => {
+    const source = topology.nodes.find(n => n.id === link.source)
+    const target = topology.nodes.find(n => n.id === link.target)
+    if (!source || !target) return ''
+
+    const sourcePos = getNodePos(source)
+    const targetPos = getNodePos(target)
 
     const startX = sourcePos.x
     const startY = sourcePos.y + nodeHeight / 2
@@ -220,7 +224,10 @@ function Topology() {
               {/* Nodes */}
               <g className="nodes">
                 {topology.nodes.map((node, idx) => {
-                  const pos = getNodePosition(node.id, idx, topology.nodes.length)
+                  // 优先使用 backend 返回的 position，否则用前端 fallback
+                  const pos = (node.position && typeof node.position.x === 'number')
+                    ? node.position
+                    : getNodePosition(node.id, idx, topology.nodes.length)
                   const isClickable = !['system', 'network'].includes(node.id)
                   const isOnline = node.status === 'online'
 

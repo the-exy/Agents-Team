@@ -7,6 +7,8 @@ import Tasks from './pages/Tasks'
 import Sessions from './pages/Sessions'
 import Memorials from './pages/Memorials'
 import Logs from './pages/Logs'
+import TokenHistory from './pages/TokenHistory'
+import Subagents from './pages/Subagents'
 
 function App() {
   const location = useLocation()
@@ -35,6 +37,12 @@ function App() {
             <Link to="/sessions" className={`nav-link ${isActive('/sessions') ? 'active' : ''}`}>
               会话监控
             </Link>
+            <Link to="/token-history" className={`nav-link ${isActive('/token-history') ? 'active' : ''}`}>
+              Token历史
+            </Link>
+            <Link to="/subagents" className={`nav-link ${isActive('/subagents') ? 'active' : ''}`}>
+              Subagent
+            </Link>
             <Link to="/memorials" className={`nav-link ${isActive('/memorials') ? 'active' : ''}`}>
               奏折阁
             </Link>
@@ -52,6 +60,8 @@ function App() {
           <Route path="/agent/:id" element={<AgentDetail />} />
           <Route path="/tasks" element={<Tasks />} />
           <Route path="/sessions" element={<Sessions />} />
+          <Route path="/token-history" element={<TokenHistory />} />
+          <Route path="/subagents" element={<Subagents />} />
           <Route path="/memorials" element={<Memorials />} />
           <Route path="/logs" element={<Logs />} />
         </Routes>
