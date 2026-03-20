@@ -34,11 +34,11 @@ function Topology() {
       return node.position
     }
 
-    const viewBoxWidth = 1000
-    const viewBoxHeight = 520
-    const centerX = 420
-    const centerY = 240
-    const mainRadius = 310
+    const viewBoxWidth = 1100
+    const viewBoxHeight = 700
+    const centerX = 500
+    const centerY = 320
+    const mainRadius = 340
 
     if (nodeId === 'main') return { x: 110, y: 180 }
 
@@ -132,8 +132,14 @@ function Topology() {
   const { nodes, links, stats } = topology
   // Filter out links referencing removed virtual nodes (system/network)
   const filteredLinks = links.filter(l => !['system', 'network'].includes(l.source) && !['system', 'network'].includes(l.target))
-  const viewBoxW = topology.viewBox?.width || 1000
-  const viewBoxH = topology.viewBox?.height || 520
+  const viewBoxW = 1100
+  const viewBoxH = 700
+
+  // 计算有意义的统计指标
+  const totalTokens = (nodes || []).reduce((sum, n) => sum + (n.totalTokens || 0), 0)
+  const activeCount = (nodes || []).filter(n => n.status === 'online').length
+  const totalSessions = (nodes || []).reduce((sum, n) => sum + (n.sessionCount || 0), 0)
+  const fmt = (n) => n >= 1000000 ? (n / 1000000).toFixed(1) + 'M' : n >= 1000 ? (n / 1000).toFixed(0) + 'K' : n
 
   return (
     <div>
@@ -174,11 +180,9 @@ function Topology() {
             fontSize: '0.8rem'
           }}>
             <span style={{ color: '#94a3b8' }}>🤖 <strong style={{ color: '#e2e8f0' }}>{stats?.totalAgents || 0}</strong> Agent</span>
-            <span style={{ color: '#94a3b8' }}>✅ <strong style={{ color: '#10b981' }}>{stats?.activeAgents || 0}</strong> 活跃</span>
-            <span style={{ color: '#94a3b8' }}>🌐 <strong style={{ color: '#e2e8f0' }}>{stats?.networkInterfaces || 0}</strong> 网卡</span>
-            <span style={{ color: '#94a3b8' }}>💻 <strong style={{ color: '#e2e8f0' }}>{stats?.hostname || 'Unknown'}</strong></span>
-            <span style={{ color: '#94a3b8' }}>📊 CPU <strong style={{ color: '#818cf8' }}>{stats?.cpu?.toFixed?.(1) || 0}%</strong></span>
-            <span style={{ color: '#94a3b8' }}>🧠 内存 <strong style={{ color: '#f59e0b' }}>{stats?.memory?.toFixed?.(1) || 0}%</strong></span>
+            <span style={{ color: '#94a3b8' }}>🔵 <strong style={{ color: '#10b981' }}>{activeCount}</strong> 在线</span>
+            <span style={{ color: '#94a3b8' }}>💬 <strong style={{ color: '#818cf8' }}>{totalSessions}</strong> 会话</span>
+            <span style={{ color: '#94a3b8' }}>📊 <strong style={{ color: '#f59e0b' }}>{fmt(totalTokens)}</strong> Token消耗</span>
           </div>
 
           {/* 拓扑 SVG */}
@@ -219,7 +223,7 @@ function Topology() {
             <svg
               className="topology-canvas"
               viewBox={`0 0 ${viewBoxW} ${viewBoxH}`}
-              style={{ width: '100%', height: 'auto', minHeight: '520px', display: 'block' }}
+              style={{ width: '100%', height: 'auto', minHeight: '700px', display: 'block' }}
             >
               {/* Connection lines */}
               <g className="links">

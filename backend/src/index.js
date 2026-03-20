@@ -631,7 +631,7 @@ app.get('/api/agents/:id/skills', (req, res) => {
       skills = baseSkills;
   }
 
-  res.json(skills);
+  res.json({ skills });
 });
 
 // GET /api/agents/:id/files - 获取 Agent 工作空间的 MD 文件
